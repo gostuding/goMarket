@@ -2,10 +2,13 @@ package server
 
 import (
 	"compress/gzip"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 )
 
@@ -94,6 +97,56 @@ func gzipMiddleware(logger *zap.SugaredLogger) func(h http.Handler) http.Handler
 			} else {
 				next.ServeHTTP(w, r)
 			}
+		}
+		return http.HandlerFunc(fn)
+	}
+}
+
+// ----------------------------------------------------------------------
+type AuthJWTStruct struct {
+	jwt.RegisteredClaims
+	UID       int
+	UserAgent string
+	Login     string
+	IP        string
+}
+
+func checkAuthToken(token string, key []byte) error {
+	if token == "" {
+		return errors.New("token is empty")
+	}
+	claims := &AuthJWTStruct{}
+	info, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return key, nil
+	})
+	if err != nil {
+		return fmt.Errorf("auth token parse error: %w", err)
+	}
+	if !info.Valid {
+		return errors.New("token is not valid")
+	}
+	return nil
+}
+
+func authMiddleware(logger *zap.SugaredLogger, exceptURL []string, redirectURL string, key []byte) func(h http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			for _, item := range exceptURL {
+				if item == r.URL.Path {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			err := checkAuthToken(r.Header.Get("Authorization"), key)
+			if err != nil {
+				http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
+				logger.Warnf("user authorization token error: %w", err)
+				return
+			}
+			next.ServeHTTP(w, r)
 		}
 		return http.HandlerFunc(fn)
 	}

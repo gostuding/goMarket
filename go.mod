@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/go-chi/chi v1.5.4
+	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/jackc/pgx/v5 v5.4.1
 	go.uber.org/zap v1.24.0
 )

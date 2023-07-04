@@ -14,14 +14,21 @@ type Storage interface {
 	Ping(context.Context) error
 }
 
-func makeRouter(strg Storage, logger *zap.SugaredLogger) http.Handler {
-	router := chi.NewRouter()
-	router.Use(middleware.RealIP, gzipMiddleware(logger), middleware.Recoverer)
+func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte) http.Handler {
 
-	router.Post("/api/user/register", func(w http.ResponseWriter, r *http.Request) {
+	exceptURLs := make([]string, 0)
+	loginURL := "/api/user/login"
+	registerURL := "/api/user/register"
+	exceptURLs = append(exceptURLs, registerURL)
+	exceptURLs = append(exceptURLs, loginURL)
+
+	router := chi.NewRouter()
+	router.Use(middleware.RealIP, authMiddleware(logger, exceptURLs, loginURL, key), gzipMiddleware(logger), middleware.Recoverer)
+
+	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
 		// GetAllMetrics(w, r, storage, logger, key)
 	})
-	router.Post("/api/user/login", func(w http.ResponseWriter, r *http.Request) {
+	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
 		// GetMetricJSON(w, r, storage, logger, key)
 	})
 	router.Post("/api/user/orders", func(w http.ResponseWriter, r *http.Request) {
@@ -48,5 +55,6 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 		return fmt.Errorf("server options error")
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
-	return http.ListenAndServe(cfg.ServerAddress, makeRouter(strg, logger))
+	handler := makeRouter(strg, logger, cfg.AuthSecretKey)
+	return http.ListenAndServe(cfg.ServerAddress, handler)
 }

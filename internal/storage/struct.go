@@ -19,6 +19,7 @@ func tablesMaps() *map[string]table {
 	users["ip"] = "15"
 	users["session"] = "32"
 	users["registered"] = time.Now()
+	users["expared"] = time.Now()
 
 	result := make(map[string]table)
 	result["users"] = users
@@ -48,7 +49,7 @@ func checkTable(ctx context.Context, name string, values map[string]any, con *sq
 		}
 	}
 
-	query := fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s  (%s);", name, strings.Join(items, ","))
+	query := fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s  (id SERIAL PRIMARY KEY, %s);", name, strings.Join(items, ","))
 	_, err := con.ExecContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("create new table ('%s') error: %w ", name, err)
