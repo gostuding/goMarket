@@ -26,7 +26,7 @@ func NewConfig() *Config {
 		ServerAddress:     "localhost:8080",
 		DBConnect:         "host=localhost user=postgres database=market",
 		AccuralAddress:    "localhost:8081",
-		AuthTokenLiveTime: 24,
+		AuthTokenLiveTime: 24, //nolint:gomnd // <- default value
 	}
 	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес и порт запуска сервиса в формате ip:port")
 	flag.StringVar(&cfg.DBConnect, "d", cfg.DBConnect, "адрес подключения к базе данных")

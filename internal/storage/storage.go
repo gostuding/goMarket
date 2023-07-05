@@ -1,21 +1,22 @@
 package storage
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type psqlStorage struct {
-	con    *sql.DB
+	con    *gorm.DB
 	logger *zap.SugaredLogger
 }
 
 func NewPSQLStorage(connectionString string, logger *zap.SugaredLogger) (*psqlStorage, error) {
-	db, err := sql.Open("pgx", connectionString)
+	db, err := gorm.Open(postgres.Open(connectionString), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("database connection create error: %w", err)
 	}
@@ -24,8 +25,4 @@ func NewPSQLStorage(connectionString string, logger *zap.SugaredLogger) (*psqlSt
 		logger: logger,
 	}
 	return &storage, structCheck(db)
-}
-
-func (s *psqlStorage) Ping(ctx context.Context) error {
-	return s.con.PingContext(ctx)
 }
