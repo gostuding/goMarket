@@ -14,7 +14,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	strg, err := storage.NewPSQLStorage(cfg.DBConnect, logger)
+	strg, err := storage.NewPSQLStorage(cfg.DBConnect)
 	if err != nil {
 		log.Fatal(err)
 	}

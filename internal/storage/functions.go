@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -20,4 +22,9 @@ func structCheck(con *gorm.DB) error {
 		return fmt.Errorf("database structure error: %w", err)
 	}
 	return nil
+}
+
+func getMD5Hash(text string) string {
+	hash := md5.Sum([]byte(text))
+	return hex.EncodeToString(hash[:])
 }

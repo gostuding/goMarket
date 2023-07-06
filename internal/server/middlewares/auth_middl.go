@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
@@ -17,6 +18,23 @@ type AuthJWTStruct struct {
 	UID       int
 }
 
+func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, AuthJWTStruct{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(liveTime) * time.Hour)),
+		},
+		UserAgent: ua,
+		Login:     login,
+		IP:        ip,
+		UID:       uid,
+	})
+	tokenString, err := token.SignedString(key)
+	if err != nil {
+		return "", fmt.Errorf("sign user token error: %w", err)
+	}
+	return tokenString, nil
+}
+
 func checkAuthToken(r *http.Request, key []byte) (string, error) {
 	token := r.Header.Get(authString)
 	if token == "" {
@@ -24,7 +42,7 @@ func checkAuthToken(r *http.Request, key []byte) (string, error) {
 	}
 	claims := &AuthJWTStruct{}
 	info, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return key, nil
@@ -42,9 +60,8 @@ func checkAuthToken(r *http.Request, key []byte) (string, error) {
 	return token, nil
 }
 
-type retFunc func(h http.Handler) http.Handler
-
-func AuthMiddleware(logger *zap.SugaredLogger, except []string, redURL string, key []byte) retFunc {
+func AuthMiddleware(logger *zap.SugaredLogger, except []string,
+	redirectURL string, key []byte) func(h http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			for _, item := range except {
@@ -55,7 +72,7 @@ func AuthMiddleware(logger *zap.SugaredLogger, except []string, redURL string, k
 			}
 			token, err := checkAuthToken(r, key)
 			if err != nil {
-				http.Redirect(w, r, redURL, http.StatusUnauthorized)
+				http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
 				logger.Warnf("user authorization token error: %w", err)
 				return
 			}

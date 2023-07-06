@@ -10,11 +10,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type Storage interface {
+type RequestResponce struct {
+	r      *http.Request
+	w      http.ResponseWriter
+	strg   Storage
+	logger *zap.SugaredLogger
 }
 
-func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte) http.Handler {
-
+func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTime int) http.Handler {
 	exceptURLs := make([]string, 0)
 	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
@@ -25,7 +28,8 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte) http.Handle
 		middlewares.GzipMiddleware(logger), middleware.Recoverer)
 
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
-		// GetAllMetrics(w, r, storage, logger, key)
+		rr := RequestResponce{r: r, w: w, strg: strg, logger: logger}
+		Registration(&RegisterStruct{RequestResponce: rr, key: key, tokenLiveTime: tokenLiveTime})
 	})
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
 		// GetMetricJSON(w, r, storage, logger, key)
@@ -51,6 +55,6 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 		return fmt.Errorf("server options error")
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
-	handler := makeRouter(strg, logger, cfg.AuthSecretKey)
+	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime)
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
