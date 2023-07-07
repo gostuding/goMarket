@@ -12,10 +12,17 @@ import (
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"gorm.io/gorm"
+)
+
+const (
+	validateError = "request validate error: %w"
+	gormError     = "gorm error: %w"
 )
 
 type Storage interface {
 	Registration(context.Context, string, string, string, string) (int, error)
+	Login(context.Context, string, string, string, string) (int, error)
 }
 
 type RegisterStruct struct {
@@ -45,21 +52,30 @@ func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
 	return &user, nil
 }
 
-func addTokenInCookeis(token string, w http.ResponseWriter, liveTime int) {
+func addToken(args *RegisterStruct, uid int, login string) {
+	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(),
+		login, args.r.RemoteAddr)
+	if err != nil {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnf("token generation error: %w", err)
+		return
+	}
+	args.w.Header().Add("Authorization", token)
 	cookie := &http.Cookie{
 		Name:    "token",
 		Value:   token,
-		MaxAge:  liveTime * int(time.Hour/time.Millisecond),
-		Expires: time.Now().Add(time.Duration(liveTime) * time.Hour),
+		MaxAge:  args.tokenLiveTime * int(time.Hour/time.Millisecond),
+		Expires: time.Now().Add(time.Duration(args.tokenLiveTime) * time.Hour),
 	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(args.w, cookie)
+	args.w.WriteHeader(http.StatusOK)
 }
 
 func Registration(args *RegisterStruct) {
 	user, err := validateLoginPassword(args.r)
 	if err != nil {
 		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnf("request validate error: %v", err)
+		args.logger.Warnf(validateError, err)
 		return
 	}
 	uid, err := args.strg.Registration(args.r.Context(), user.Login, user.Password,
@@ -71,19 +87,33 @@ func Registration(args *RegisterStruct) {
 			args.logger.Infoln("user duplicate error", user.Login)
 		} else {
 			args.w.WriteHeader(http.StatusInternalServerError)
-			args.logger.Warnf("gorm error: %w", err)
+			args.logger.Warnf(gormError, err)
 		}
 		return
 	}
 	args.logger.Debugf("new user success registrated: '%s'", user.Login)
-	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(),
-		user.Login, args.r.RemoteAddr)
+	addToken(args, uid, user.Login)
+}
+
+func Login(args *RegisterStruct) {
+	user, err := validateLoginPassword(args.r)
 	if err != nil {
-		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnf("token generation error: %w", err)
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnf(validateError, err)
 		return
 	}
-	args.w.Header().Add("Authorization", token)
-	addTokenInCookeis(token, args.w, args.tokenLiveTime)
-	args.w.WriteHeader(http.StatusOK)
+	uid, err := args.strg.Login(args.r.Context(), user.Login, user.Password,
+		args.r.UserAgent(), args.r.RemoteAddr)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			args.w.WriteHeader(http.StatusUnauthorized)
+			args.logger.Warnf("user not found in system. Login: '%s'", user.Login)
+		} else {
+			args.w.WriteHeader(http.StatusInternalServerError)
+			args.logger.Warnf(gormError, err)
+		}
+		return
+	}
+	args.logger.Debugf("user login success: '%s'", user.Login)
+	addToken(args, uid, user.Login)
 }

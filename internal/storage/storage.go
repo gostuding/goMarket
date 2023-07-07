@@ -37,3 +37,18 @@ func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip strin
 	}
 	return int(user.ID), nil
 }
+
+func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int, error) {
+	var user Users
+	result := s.con.WithContext(ctx).Where("login = ? AND pwd = ?", login, getMD5Hash(pwd)).First(&user)
+	if result.Error != nil {
+		return 0, fmt.Errorf("get user error: %w", result.Error)
+	}
+	user.UserAgent = ua
+	user.IP = ip
+	result = s.con.WithContext(ctx).Save(&user)
+	if result.Error != nil {
+		return 0, fmt.Errorf("update user in login error: %w", result.Error)
+	}
+	return int(user.ID), nil
+}
