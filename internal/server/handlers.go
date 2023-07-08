@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gostuding/goMarket/internal/server/middlewares"
@@ -71,6 +72,35 @@ func addToken(args *RegisterStruct, uid int, login string) {
 	args.w.WriteHeader(http.StatusOK)
 }
 
+func checkOrderNumber(order string) (bool, error) {
+	initPosition := 0
+	if len(order)%2 == 0 {
+		initPosition = 1
+	}
+	summ := 0
+	for i := 0; i < len(order)-1; i++ {
+		value, err := strconv.Atoi(fmt.Sprintf("%c", order[i]))
+		if err != nil {
+			return false, fmt.Errorf("order error in position %d: %w", i, err)
+		}
+		if initPosition == i {
+			initPosition += 2
+			summ += (2 * value) % 9
+		} else {
+			summ += value
+		}
+	}
+	summ = summ % 10
+	value, err := strconv.Atoi(fmt.Sprintf("%c", order[len(order)-1]))
+	if err != nil {
+		return false, fmt.Errorf("order controll summ value error: %w", err)
+	}
+	if summ == value {
+		return true, nil
+	}
+	return false, errors.New("order control summ not equal")
+}
+
 func Registration(args *RegisterStruct) {
 	user, err := validateLoginPassword(args.r)
 	if err != nil {
@@ -116,4 +146,26 @@ func Login(args *RegisterStruct) {
 	}
 	args.logger.Debugf("user login success: '%s'", user.Login)
 	addToken(args, uid, user.Login)
+}
+
+func Orders(args RequestResponce) {
+	body, err := io.ReadAll(args.r.Body)
+	if err != nil {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnf("orders body read error: %w", err)
+		return
+	}
+	if body == nil && string(body) == "" {
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnln("empty oerders body")
+		return
+	}
+	order := string(body)
+	ok, err := checkOrderNumber(order)
+	if err != nil {
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnln(err)
+		return
+	}
+	// TODO обработка запроса в БД
 }

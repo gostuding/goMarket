@@ -52,3 +52,7 @@ func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int
 	}
 	return int(user.ID), nil
 }
+
+func (s *psqlStorage) AddOrder(ctx context.Context, order string) (int, error) {
+	return 0, nil
+}

@@ -16,8 +16,15 @@ type Users struct {
 	IP        string `gorm:"type:varchar(15)"`
 }
 
+type Orders struct {
+	gorm.Model
+	Order  string `gorm:"unique"`
+	UID    int    `gorm:"type:int"`
+	Status string `gorm:"type:varchar(10)"`
+}
+
 func structCheck(con *gorm.DB) error {
-	err := con.AutoMigrate(&Users{})
+	err := con.AutoMigrate(&Users{}, &Orders{})
 	if err != nil {
 		return fmt.Errorf("database structure error: %w", err)
 	}
