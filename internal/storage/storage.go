@@ -56,16 +56,17 @@ func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int
 	return int(user.ID), nil
 }
 
-func (s *psqlStorage) isOrderExist(ctx context.Context, item *Orders) (*Orders, error) {
-	result := s.con.WithContext(ctx).First(item)
+func (s *psqlStorage) isOrderExist(ctx context.Context, order string) (*Orders, error) {
+	var item Orders
+	result := s.con.WithContext(ctx).Where("number = ? ", order).First(&item)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	return item, nil
+	return &item, nil
 }
 
 func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int, error) {
-	item, err := s.isOrderExist(ctx, &Orders{Order: order})
+	item, err := s.isOrderExist(ctx, order)
 	if item != nil {
 		if item.UID == uid {
 			return http.StatusOK, nil
@@ -73,7 +74,7 @@ func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int,
 		return http.StatusConflict, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Order: order, Status: "New"})
+		result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "New"})
 		if result.Error != nil {
 			return http.StatusInternalServerError, fmt.Errorf("create order error: %w", result.Error)
 		}

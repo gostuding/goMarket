@@ -25,7 +25,7 @@ type Orders struct {
 	ID        uint      `gorm:"primarykey" json:"-"`
 	CreatedAt time.Time `json:"uploaded_at"`
 	UpdatedAt time.Time `json:"-"`
-	Order     string    `gorm:"unique" json:"number"`
+	Number    string    `gorm:"unique" json:"number"`
 	UID       int       `gorm:"type:int" json:"-"`
 	Status    string    `gorm:"type:varchar(10)" json:"status"`
 	Accrual   float32   `gorm:"type:double precision" json:"accrual,omitempty"`
