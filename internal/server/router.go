@@ -36,10 +36,13 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		Login(&RegisterStruct{RequestResponce: rr, key: key, tokenLiveTime: tokenLiveTime})
 	})
 	router.Post("/api/user/orders", func(w http.ResponseWriter, r *http.Request) {
-		// GetMetric(w, r, storage, getParams(r), logger, key)
+		OrdersAdd(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+	})
+	router.Get("/api/user/orders", func(w http.ResponseWriter, r *http.Request) {
+		OrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
 	router.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
-		// UpdateJSON(w, r, storage, logger, key)
+		UserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
 	router.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
 		// UpdateJSONSLice(w, r, storage, logger, key)

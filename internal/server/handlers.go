@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gostuding/goMarket/internal/server/middlewares"
@@ -24,6 +25,9 @@ const (
 type Storage interface {
 	Registration(context.Context, string, string, string, string) (int, error)
 	Login(context.Context, string, string, string, string) (int, error)
+	AddOrder(context.Context, string, int) (int, error)
+	GetOrders(context.Context, int) ([]byte, error)
+	GetUserBalance(context.Context, string) ([]byte, error)
 }
 
 type RegisterStruct struct {
@@ -55,7 +59,7 @@ func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
 
 func addToken(args *RegisterStruct, uid int, login string) {
 	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(),
-		login, args.r.RemoteAddr)
+		login, strings.Split(args.r.RemoteAddr, ":")[0])
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
 		args.logger.Warnf("token generation error: %w", err)
@@ -72,16 +76,16 @@ func addToken(args *RegisterStruct, uid int, login string) {
 	args.w.WriteHeader(http.StatusOK)
 }
 
-func checkOrderNumber(order string) (bool, error) {
+func checkOrderNumber(order string) error {
 	initPosition := 0
-	if len(order)%2 == 0 {
+	if len(order)%2 > 0 {
 		initPosition = 1
 	}
 	summ := 0
-	for i := 0; i < len(order)-1; i++ {
+	for i := 0; i < len(order); i++ {
 		value, err := strconv.Atoi(fmt.Sprintf("%c", order[i]))
 		if err != nil {
-			return false, fmt.Errorf("order error in position %d: %w", i, err)
+			return fmt.Errorf("order error in position %d: %w", i, err)
 		}
 		if initPosition == i {
 			initPosition += 2
@@ -90,15 +94,10 @@ func checkOrderNumber(order string) (bool, error) {
 			summ += value
 		}
 	}
-	summ = summ % 10
-	value, err := strconv.Atoi(fmt.Sprintf("%c", order[len(order)-1]))
-	if err != nil {
-		return false, fmt.Errorf("order controll summ value error: %w", err)
+	if summ%10 == 0 {
+		return nil
 	}
-	if summ == value {
-		return true, nil
-	}
-	return false, errors.New("order control summ not equal")
+	return errors.New("order control summ not equal")
 }
 
 func Registration(args *RegisterStruct) {
@@ -148,7 +147,7 @@ func Login(args *RegisterStruct) {
 	addToken(args, uid, user.Login)
 }
 
-func Orders(args RequestResponce) {
+func OrdersAdd(args RequestResponce) {
 	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
@@ -157,15 +156,65 @@ func Orders(args RequestResponce) {
 	}
 	if body == nil && string(body) == "" {
 		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnln("empty oerders body")
+		args.logger.Warnln("empty orders body")
 		return
 	}
 	order := string(body)
-	ok, err := checkOrderNumber(order)
+	err = checkOrderNumber(order)
 	if err != nil {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnln(err)
+		args.w.WriteHeader(http.StatusUnprocessableEntity)
+		args.logger.Warnln(fmt.Sprintf("check order error: %v", err))
 		return
 	}
-	// TODO обработка запроса в БД
+	uid, err := strconv.Atoi(args.r.Header.Get(authHeader))
+	if err != nil {
+		args.w.WriteHeader(http.StatusUnauthorized)
+		args.logger.Warnln(fmt.Sprintf("uid convert error: %v", err))
+		return
+	}
+	status, err := args.strg.AddOrder(args.r.Context(), order, uid)
+	if err != nil {
+		args.logger.Warnln(err)
+	}
+	args.logger.Debugln("add order status", status)
+	args.w.WriteHeader(status)
+}
+
+func OrdersList(args RequestResponce) {
+	args.logger.Debug("orders list request")
+	uid, err := strconv.Atoi(args.r.Header.Get(authHeader))
+	if err != nil {
+		args.w.WriteHeader(http.StatusUnauthorized)
+		args.logger.Warnln(fmt.Sprintf("uid convert error: %v", err))
+		return
+	}
+	data, err := args.strg.GetOrders(args.r.Context(), uid)
+	if err != nil {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnln(fmt.Sprintf("get orders list error: %v", err))
+		return
+	}
+	if data == nil {
+		args.w.WriteHeader(http.StatusNoContent)
+	}
+	args.w.Header().Add(contentTypeString, ctApplicationJsonString)
+	_, err = args.w.Write(data)
+	if err != nil {
+		args.logger.Warnln(fmt.Sprintf(writeResponceErrorString, err))
+	}
+}
+
+func UserBalance(args RequestResponce) {
+	args.logger.Debug("user balance request")
+	data, err := args.strg.GetUserBalance(args.r.Context(), args.r.Header.Get(authHeader))
+	if err != nil {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnln(fmt.Sprintf("get orders list error: %v", err))
+		return
+	}
+	args.w.Header().Add(contentTypeString, ctApplicationJsonString)
+	_, err = args.w.Write(data)
+	if err != nil {
+		args.logger.Warnln(fmt.Sprintf(writeResponceErrorString, err))
+	}
 }

@@ -4,23 +4,31 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 type Users struct {
-	gorm.Model
-	Login     string `gorm:"unique,type:varchar(20)"`
-	Pwd       string `gorm:"type:varchar(32)"`
-	UserAgent string `gorm:"type:varchar(255)"`
-	IP        string `gorm:"type:varchar(15)"`
+	ID        uint      `gorm:"primarykey" json:"-"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
+	Login     string    `gorm:"unique,type:varchar(20)" json:"-"`
+	Pwd       string    `gorm:"type:varchar(32)" json:"-"`
+	UserAgent string    `gorm:"type:varchar(255)" json:"-"`
+	IP        string    `gorm:"type:varchar(15)" json:"-"`
+	Balance   float32   `gorm:"type:double precision" json:"curent"`
+	Withdrawn float32   `gorm:"type:double precision" json:"withdrawn"`
 }
 
 type Orders struct {
-	gorm.Model
-	Order  string `gorm:"unique"`
-	UID    int    `gorm:"type:int"`
-	Status string `gorm:"type:varchar(10)"`
+	ID        uint      `gorm:"primarykey" json:"-"`
+	CreatedAt time.Time `json:"uploaded_at"`
+	UpdatedAt time.Time `json:"-"`
+	Order     string    `gorm:"unique" json:"number"`
+	UID       int       `gorm:"type:int" json:"-"`
+	Status    string    `gorm:"type:varchar(10)" json:"status"`
+	Accrual   float32   `gorm:"type:double precision" json:"accrual,omitempty"`
 }
 
 func structCheck(con *gorm.DB) error {

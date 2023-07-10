@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -53,7 +54,7 @@ func checkAuthToken(r *http.Request, key []byte) (string, error) {
 	if !info.Valid {
 		return "", errors.New("token is not valid")
 	}
-	if claims.UserAgent != r.UserAgent() || claims.IP != r.RemoteAddr {
+	if claims.UserAgent != r.UserAgent() || claims.IP != strings.Split(r.RemoteAddr, ":")[0] {
 		return "", errors.New("session ended. Login requaged")
 	}
 	r.Header.Set(authString, fmt.Sprintf("%d", claims.UID))
