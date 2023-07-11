@@ -4,5 +4,10 @@ const (
 	writeResponceErrorString = "responce body write error: %v"
 	authHeader               = "Authorization"
 	contentTypeString        = "Content-Type"
-	ctApplicationJsonString  = "application/json"
+	ctApplicationJSONString  = "application/json"
+	checkOrderErrorString    = "check order error"
+	bodyReadError            = "orders body read error"
+	jsonConvertEerrorString  = "convert to json error"
+	colon                    = ":"
+	uidConvertErrorString    = "uid convert error"
 )

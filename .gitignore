@@ -22,4 +22,7 @@ vendor/
 .idea
 .vscode
 
+
+.golangci.yml
+test.py
 golangci-lint/*.json

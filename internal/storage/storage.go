@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/jackc/pgerrcode"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -45,7 +47,7 @@ func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int
 	var user Users
 	result := s.con.WithContext(ctx).Where("login = ? AND pwd = ?", login, getMD5Hash(pwd)).First(&user)
 	if result.Error != nil {
-		return 0, fmt.Errorf("get user error: %w", result.Error)
+		return 0, fmt.Errorf("user error: %w", result.Error)
 	}
 	user.UserAgent = ua
 	user.IP = ip
@@ -83,31 +85,71 @@ func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int,
 	return http.StatusInternalServerError, fmt.Errorf("select order error: %w", err)
 }
 
-func (s *psqlStorage) GetOrders(ctx context.Context, uid int) ([]byte, error) {
-	var orders []Orders
-	result := s.con.WithContext(ctx).Where("uid = ?", uid).Find(&orders)
+func (s *psqlStorage) getValues(ctx context.Context, uid string, values any) ([]byte, error) {
+	result := s.con.Order("id desc").WithContext(ctx).Where("uid = ?", uid).Find(values)
 	if result.Error != nil {
-		return nil, fmt.Errorf("get orders error: %w", result.Error)
+		return nil, fmt.Errorf("get values error: %w", result.Error)
 	}
-	if len(orders) == 0 {
+	if result.RowsAffected == 0 {
 		return nil, nil
 	}
-	data, err := json.Marshal(orders)
+	data, err := json.Marshal(values)
 	if err != nil {
 		return nil, fmt.Errorf("json convert error: %w", err)
 	}
 	return data, nil
 }
 
+func (s *psqlStorage) GetOrders(ctx context.Context, uid string) ([]byte, error) {
+	var orders []Orders
+	return s.getValues(ctx, uid, &orders)
+}
+
 func (s *psqlStorage) GetUserBalance(ctx context.Context, uid string) ([]byte, error) {
 	var user Users
-	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
+	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user) //nolint:all // more clearly
 	if result.Error != nil {
 		return nil, fmt.Errorf("get user balance error: %w", result.Error)
 	}
 	data, err := json.Marshal(user)
 	if err != nil {
-		return nil, fmt.Errorf("json convert error: %w", err)
+		return nil, fmt.Errorf("balance convert error: %w", err)
 	}
 	return data, nil
+}
+
+func (s *psqlStorage) AddWithdraw(ctx context.Context, uid, order string, sum float32) (int, error) {
+	var user Users
+	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
+	if result.Error != nil {
+		return http.StatusInternalServerError, fmt.Errorf("get user error: %w", result.Error)
+	}
+	if user.Balance < sum {
+		return http.StatusPaymentRequired, nil
+	}
+	user.Balance -= sum
+	user.Withdrawn += sum
+	withdraw := Withdraws{Sum: sum, UID: int(user.ID), Number: order}
+	err := s.con.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&user).Error; err != nil {
+			return fmt.Errorf("update user balance error: %w", err)
+		}
+		if err := tx.Create(&withdraw).Error; err != nil {
+			return fmt.Errorf("create withdraw error: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return http.StatusConflict, errors.New("order number repeat error")
+		}
+		return http.StatusInternalServerError, fmt.Errorf("transaction error: %w", err)
+	}
+	return http.StatusOK, nil
+}
+
+func (s *psqlStorage) GetWithdraws(ctx context.Context, uid string) ([]byte, error) {
+	var withdraws []Withdraws
+	return s.getValues(ctx, uid, &withdraws)
 }

@@ -21,6 +21,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	exceptURLs := make([]string, 0)
 	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
+	var userOrders = "/api/user/orders"
 	exceptURLs = append(exceptURLs, registerURL, loginURL)
 
 	router := chi.NewRouter()
@@ -35,20 +36,20 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		rr := RequestResponce{r: r, w: w, strg: strg, logger: logger}
 		Login(&RegisterStruct{RequestResponce: rr, key: key, tokenLiveTime: tokenLiveTime})
 	})
-	router.Post("/api/user/orders", func(w http.ResponseWriter, r *http.Request) {
+	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
 		OrdersAdd(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
-	router.Get("/api/user/orders", func(w http.ResponseWriter, r *http.Request) {
+	router.Get(userOrders, func(w http.ResponseWriter, r *http.Request) {
 		OrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
 	router.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
 		UserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
 	router.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
-		// UpdateJSONSLice(w, r, storage, logger, key)
+		AddWithdraw(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
-	router.Get("/api/user/withdrawal", func(w http.ResponseWriter, r *http.Request) {
-		// Ping(w, r, storage, logger)
+	router.Get("/api/user/withdrawals", func(w http.ResponseWriter, r *http.Request) {
+		WithdrawsList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
 
 	return router

@@ -28,17 +28,18 @@ func NewConfig() *Config {
 		AccuralAddress:    "localhost:8081",
 		AuthTokenLiveTime: 24, //nolint:gomnd // <- default value
 	}
-	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес и порт запуска сервиса в формате ip:port")
-	flag.StringVar(&cfg.DBConnect, "d", cfg.DBConnect, "адрес подключения к базе данных")
-	flag.StringVar(&cfg.AccuralAddress, "r", cfg.AccuralAddress, "адрес системы расчёта начислений")
-	flag.StringVar(&key, "k", key, "ключ для формарования токена авторизации")
-	flag.IntVar(&cfg.AuthTokenLiveTime, "t", cfg.AuthTokenLiveTime, "время жизни токена авторизации (час)")
-	flag.Parse()
 
 	cfg.ServerAddress = envValue(cfg.ServerAddress, "RUN_ADDRESS")
 	cfg.DBConnect = envValue(cfg.DBConnect, "DATABASE_URI")
 	cfg.AccuralAddress = envValue(cfg.AccuralAddress, "ACCRUAL_SYSTEM_ADDRESS")
 	key = envValue(key, "TOCKEN_KEY")
 	cfg.AuthSecretKey = []byte(key)
+
+	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес и порт запуска сервиса в формате ip:port")
+	flag.StringVar(&cfg.DBConnect, "d", cfg.DBConnect, "адрес подключения к базе данных")
+	flag.StringVar(&cfg.AccuralAddress, "r", cfg.AccuralAddress, "адрес системы расчёта начислений")
+	flag.StringVar(&key, "k", key, "ключ для формарования токена авторизации")
+	flag.IntVar(&cfg.AuthTokenLiveTime, "t", cfg.AuthTokenLiveTime, "время жизни токена авторизации (час)")
+	flag.Parse()
 	return &cfg
 }
