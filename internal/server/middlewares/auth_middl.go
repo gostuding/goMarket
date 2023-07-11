@@ -73,8 +73,9 @@ func AuthMiddleware(logger *zap.SugaredLogger, except []string,
 			}
 			token, err := checkAuthToken(r, key)
 			if err != nil {
-				http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
-				logger.Warnf("user authorization token error: %w", err)
+				// http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
+				w.WriteHeader(http.StatusUnauthorized)
+				logger.Warnf("%s authorization token error: %w", r.URL.Path, err)
 				return
 			}
 			w.Header().Set(authString, token)
