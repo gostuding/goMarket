@@ -188,6 +188,7 @@ func OrdersAdd(args RequestResponce) {
 }
 func getListCommon(args RequestResponce, name string, f func(context.Context, string) ([]byte, error)) {
 	args.logger.Debug(name, "list request")
+	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	data, err := f(args.r.Context(), args.r.Header.Get(authHeader))
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
@@ -196,11 +197,12 @@ func getListCommon(args RequestResponce, name string, f func(context.Context, st
 	}
 	if data == nil {
 		args.w.WriteHeader(http.StatusNoContent)
+	} else {
+		args.w.WriteHeader(http.StatusOK)
 	}
-	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	_, err = args.w.Write(data)
 	if err != nil {
-		args.logger.Warnln(fmt.Sprintf(writeResponceErrorString, err))
+		args.logger.Warnln(writeResponceErrorString, err)
 	}
 }
 func OrdersList(args RequestResponce) {

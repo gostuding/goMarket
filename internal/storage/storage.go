@@ -76,7 +76,7 @@ func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int,
 		return http.StatusConflict, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "New"})
+		result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "NEW"})
 		if result.Error != nil {
 			return http.StatusInternalServerError, fmt.Errorf("create order error: %w", result.Error)
 		}
