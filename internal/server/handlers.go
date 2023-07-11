@@ -186,7 +186,7 @@ func OrdersAdd(args RequestResponce) {
 	args.logger.Debugln("add order status", status)
 	args.w.WriteHeader(status)
 }
-func getListCommon(args RequestResponce, name string, f func(context.Context, string) ([]byte, error)) {
+func getListCommon(args *RequestResponce, name string, f func(context.Context, string) ([]byte, error)) {
 	args.logger.Debug(name, "list request")
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	data, err := f(args.r.Context(), args.r.Header.Get(authHeader))
@@ -206,7 +206,7 @@ func getListCommon(args RequestResponce, name string, f func(context.Context, st
 	}
 }
 func OrdersList(args RequestResponce) {
-	getListCommon(args, "orders", args.strg.GetOrders)
+	getListCommon(&args, "orders", args.strg.GetOrders)
 }
 
 func UserBalance(args RequestResponce) {
@@ -256,5 +256,5 @@ func AddWithdraw(args RequestResponce) {
 }
 
 func WithdrawsList(args RequestResponce) {
-	getListCommon(args, "withdraws", args.strg.GetWithdraws)
+	getListCommon(&args, "withdraws", args.strg.GetWithdraws)
 }
