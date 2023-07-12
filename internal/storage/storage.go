@@ -67,7 +67,7 @@ func (s *psqlStorage) isOrderExist(ctx context.Context, order string) (*Orders, 
 	return &item, nil
 }
 
-func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int, error) {
+func (s *psqlStorage) AddOrder(ctx context.Context, uid int, order string) (int, error) {
 	item, err := s.isOrderExist(ctx, order)
 	if item != nil {
 		if item.UID == uid {
@@ -85,8 +85,8 @@ func (s *psqlStorage) AddOrder(ctx context.Context, order string, uid int) (int,
 	return http.StatusInternalServerError, fmt.Errorf("select order error: %w", err)
 }
 
-func (s *psqlStorage) getValues(ctx context.Context, uid string, values any) ([]byte, error) {
-	result := s.con.Order("id desc").WithContext(ctx).Where("uid = ?", uid).Find(values)
+func (s *psqlStorage) getValues(ctx context.Context, uid int, values any) ([]byte, error) {
+	result := s.con.WithContext(ctx).Order("id desc").Where("uid = ?", uid).Find(values)
 	if result.Error != nil {
 		return nil, fmt.Errorf("get values error: %w", result.Error)
 	}
@@ -100,12 +100,12 @@ func (s *psqlStorage) getValues(ctx context.Context, uid string, values any) ([]
 	return data, nil
 }
 
-func (s *psqlStorage) GetOrders(ctx context.Context, uid string) ([]byte, error) {
+func (s *psqlStorage) GetOrders(ctx context.Context, uid int) ([]byte, error) {
 	var orders []Orders
 	return s.getValues(ctx, uid, &orders)
 }
 
-func (s *psqlStorage) GetUserBalance(ctx context.Context, uid string) ([]byte, error) {
+func (s *psqlStorage) GetUserBalance(ctx context.Context, uid int) ([]byte, error) {
 	var user Users
 	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user) //nolint:all // more clearly
 	if result.Error != nil {
@@ -118,7 +118,7 @@ func (s *psqlStorage) GetUserBalance(ctx context.Context, uid string) ([]byte, e
 	return data, nil
 }
 
-func (s *psqlStorage) AddWithdraw(ctx context.Context, uid, order string, sum float32) (int, error) {
+func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, sum float32) (int, error) {
 	var user Users
 	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
 	if result.Error != nil {
@@ -149,7 +149,7 @@ func (s *psqlStorage) AddWithdraw(ctx context.Context, uid, order string, sum fl
 	return http.StatusOK, nil
 }
 
-func (s *psqlStorage) GetWithdraws(ctx context.Context, uid string) ([]byte, error) {
+func (s *psqlStorage) GetWithdraws(ctx context.Context, uid int) ([]byte, error) {
 	var withdraws []Withdraws
 	return s.getValues(ctx, uid, &withdraws)
 }

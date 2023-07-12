@@ -1,17 +1,22 @@
 package middlewares
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 )
 
-type AuthJWTStruct struct {
+type uidstr string
+
+const AuthUID uidstr = "uid"
+
+type authJWTStruct struct {
 	jwt.RegisteredClaims
 	UserAgent string
 	Login     string
@@ -20,7 +25,7 @@ type AuthJWTStruct struct {
 }
 
 func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, AuthJWTStruct{
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, authJWTStruct{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(liveTime) * time.Hour)),
 		},
@@ -36,12 +41,12 @@ func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, e
 	return tokenString, nil
 }
 
-func checkAuthToken(r *http.Request, key []byte) (string, error) {
+func checkAuthToken(r *http.Request, key []byte) (int, error) {
 	token := r.Header.Get(authString)
 	if token == "" {
-		return "", errors.New("token is empty")
+		return 0, errors.New("token is empty")
 	}
-	claims := &AuthJWTStruct{}
+	claims := &authJWTStruct{}
 	info, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -49,16 +54,19 @@ func checkAuthToken(r *http.Request, key []byte) (string, error) {
 		return key, nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("auth token parse error: %w", err)
+		return 0, fmt.Errorf("auth token parse error: %w", err)
 	}
 	if !info.Valid {
-		return "", errors.New("token is not valid")
+		return 0, errors.New("token is not valid")
 	}
-	if claims.UserAgent != r.UserAgent() || claims.IP != strings.Split(r.RemoteAddr, ":")[0] {
-		return "", errors.New("session ended. Login requaged")
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return 0, fmt.Errorf("user ip not equal to IP:port, error: %w", err)
 	}
-	r.Header.Set(authString, fmt.Sprintf("%d", claims.UID))
-	return token, nil
+	if claims.UserAgent != r.UserAgent() || claims.IP != ip {
+		return 0, errors.New("user data changed. Reauth requaged")
+	}
+	return claims.UID, nil
 }
 
 func AuthMiddleware(logger *zap.SugaredLogger, except []string,
@@ -71,15 +79,14 @@ func AuthMiddleware(logger *zap.SugaredLogger, except []string,
 					return
 				}
 			}
-			token, err := checkAuthToken(r, key)
+			uid, err := checkAuthToken(r, key)
 			if err != nil {
-				// http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
-				w.WriteHeader(http.StatusUnauthorized)
+				http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
 				logger.Warnf("%s authorization token error: %w", r.URL.Path, err)
 				return
 			}
-			w.Header().Set(authString, token)
-			next.ServeHTTP(w, r)
+			w.Header().Set(authString, r.Header.Get(authString))
+			next.ServeHTTP(w, r.Clone(context.WithValue(r.Context(), AuthUID, uid)))
 		}
 		return http.HandlerFunc(fn)
 	}

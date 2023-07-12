@@ -8,6 +8,6 @@ const (
 	checkOrderErrorString    = "check order error"
 	bodyReadError            = "orders body read error"
 	jsonConvertEerrorString  = "convert to json error"
-	colon                    = ":"
 	uidConvertErrorString    = "uid convert error"
+	uidContextTypeError      = "context uid is not int"
 )

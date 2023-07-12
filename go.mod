@@ -3,7 +3,9 @@ module github.com/gostuding/goMarket
 go 1.20
 
 require (
+	github.com/Yandex-Practicum/go-autotests v0.9.16
 	github.com/go-chi/chi v1.5.4
+	github.com/go-resty/resty/v2 v2.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
 	github.com/jackc/pgx/v5 v5.4.1
@@ -20,5 +22,6 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/crypto v0.9.0 // indirect
+	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 )

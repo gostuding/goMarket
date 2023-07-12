@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gostuding/goMarket/internal/server/middlewares"
@@ -25,11 +25,11 @@ const (
 type Storage interface {
 	Registration(context.Context, string, string, string, string) (int, error)
 	Login(context.Context, string, string, string, string) (int, error)
-	AddOrder(context.Context, string, int) (int, error)
-	GetOrders(context.Context, string) ([]byte, error)
-	GetUserBalance(context.Context, string) ([]byte, error)
-	AddWithdraw(context.Context, string, string, float32) (int, error)
-	GetWithdraws(context.Context, string) ([]byte, error)
+	AddOrder(context.Context, int, string) (int, error)
+	GetOrders(context.Context, int) ([]byte, error)
+	GetUserBalance(context.Context, int) ([]byte, error)
+	AddWithdraw(context.Context, int, string, float32) (int, error)
+	GetWithdraws(context.Context, int) ([]byte, error)
 }
 
 type RegisterStruct struct {
@@ -65,8 +65,13 @@ func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
 }
 
 func addToken(args *RegisterStruct, uid int, login string) {
-	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(),
-		login, strings.Split(args.r.RemoteAddr, colon)[0])
+	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
+	if err != nil {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnf("user ip addres error: %w", err)
+		return
+	}
+	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(), login, ip)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
 		args.logger.Warnf("token generation error: %w", err)
@@ -114,8 +119,13 @@ func Registration(args *RegisterStruct) {
 		args.logger.Warnf(validateError, err)
 		return
 	}
-	uid, err := args.strg.Registration(args.r.Context(), user.Login, user.Password,
-		args.r.UserAgent(), strings.Split(args.r.RemoteAddr, colon)[0])
+	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
+	if err != nil {
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnf(validateError, err)
+		return
+	}
+	uid, err := args.strg.Registration(args.r.Context(), user.Login, user.Password, args.r.UserAgent(), ip)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -138,8 +148,14 @@ func Login(args *RegisterStruct) {
 		args.logger.Warnf(validateError, err)
 		return
 	}
-	uid, err := args.strg.Login(args.r.Context(), user.Login, user.Password,
-		args.r.UserAgent(), strings.Split(args.r.RemoteAddr, colon)[0])
+	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
+	if err != nil {
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnf(validateError, err)
+		return
+	}
+	uid, err := args.strg.Login(args.r.Context(), user.Login,
+		user.Password, args.r.UserAgent(), ip)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			args.w.WriteHeader(http.StatusUnauthorized)
@@ -173,23 +189,29 @@ func OrdersAdd(args RequestResponce) {
 		args.logger.Warnln(checkOrderErrorString, err)
 		return
 	}
-	uid, err := strconv.Atoi(args.r.Header.Get(authHeader))
-	if err != nil {
+	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
+	if !ok {
 		args.w.WriteHeader(http.StatusUnauthorized)
-		args.logger.Warnln(uidConvertErrorString, err)
+		args.logger.Warnln(uidContextTypeError)
 		return
 	}
-	status, err := args.strg.AddOrder(args.r.Context(), order, uid)
+	status, err := args.strg.AddOrder(args.r.Context(), uid, order)
 	if err != nil {
 		args.logger.Warnln(err)
 	}
 	args.logger.Debugln("add order status", status)
 	args.w.WriteHeader(status)
 }
-func getListCommon(args *RequestResponce, name string, f func(context.Context, string) ([]byte, error)) {
+func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
 	args.logger.Debug(name, "list request")
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
-	data, err := f(args.r.Context(), args.r.Header.Get(authHeader))
+	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
+	if !ok {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnln(uidContextTypeError)
+		return
+	}
+	data, err := f(args.r.Context(), uid)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
 		args.logger.Warnln(name, "get list error", err)
@@ -211,7 +233,13 @@ func OrdersList(args RequestResponce) {
 
 func UserBalance(args RequestResponce) {
 	args.logger.Debug("user balance request")
-	data, err := args.strg.GetUserBalance(args.r.Context(), args.r.Header.Get(authHeader))
+	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
+	if !ok {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnln(uidContextTypeError)
+		return
+	}
+	data, err := args.strg.GetUserBalance(args.r.Context(), uid)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
 		args.logger.Warnln("get user balance error", err)
@@ -245,14 +273,18 @@ func AddWithdraw(args RequestResponce) {
 		args.logger.Warnln(checkOrderErrorString, err)
 		return
 	}
-	status, err := args.strg.AddWithdraw(args.r.Context(), args.r.Header.Get(authHeader),
-		withdraw.Order, withdraw.Sum)
-	args.logger.Debugln("add withdraw status", status)
-	args.w.WriteHeader(status)
-	if err != nil {
-		args.logger.Warnln("add withdraw error", err)
+	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
+	if !ok {
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnln(uidContextTypeError)
 		return
 	}
+	status, err := args.strg.AddWithdraw(args.r.Context(), uid, withdraw.Order, withdraw.Sum)
+	if err != nil {
+		args.logger.Warnln("add withdraw error", err)
+	}
+	args.logger.Debugln("add withdraw status", status)
+	args.w.WriteHeader(status)
 }
 
 func WithdrawsList(args RequestResponce) {
