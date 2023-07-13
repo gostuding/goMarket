@@ -24,7 +24,7 @@ type RequestResponce struct {
 
 type CheckOrdersStorage interface {
 	GetAccrualOrders() []string
-	SetOrderData(string, float32)
+	SetOrderData(string, string, float32)
 }
 
 type ordersStatus struct {
@@ -81,22 +81,23 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
 
-func accrualRequest(url string, strg CheckOrdersStorage) {
+func timeRequest(url string, strg CheckOrdersStorage) {
 	updateTicker := time.NewTicker(time.Second)
 	defer updateTicker.Stop()
 	for {
 		select {
 		case <-updateTicker.C:
-			orders := strg.GetAccrualOrders()
-			for _, order := range orders {
-				sleepTime, err := mkAccrualRequest(fmt.Sprintf("%s/%s", url, order))
-
+			for _, order := range strg.GetAccrualOrders() {
+				select{
+				case <- struct{}:
+					go accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
+				}
 			}
 		}
 	}
 }
 
-func mkAccrualRequest(url string, strg CheckOrdersStorage) (int, error) {
+func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	client := http.Client{}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
