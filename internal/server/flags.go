@@ -25,7 +25,7 @@ func NewConfig() *Config {
 	cfg := Config{
 		ServerAddress:     "localhost:8080",
 		DBConnect:         "host=localhost user=postgres database=market",
-		AccuralAddress:    "localhost:8081",
+		AccuralAddress:    "http://localhost:8081",
 		AuthTokenLiveTime: 24, //nolint:gomnd // <- default value
 	}
 

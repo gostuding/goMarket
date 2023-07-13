@@ -24,7 +24,7 @@ type RequestResponce struct {
 
 type CheckOrdersStorage interface {
 	GetAccrualOrders() []string
-	SetOrderData(string, string, float32)
+	SetOrderData(string, string, float32) error
 }
 
 type ordersStatus struct {
@@ -77,21 +77,23 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime)
-	go accrualRequest(fmt.Sprintf("%s/api/orders/", cfg.AccuralAddress), strg)
+	go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
 
-func timeRequest(url string, strg CheckOrdersStorage) {
+func timeRequest(url string, logger *zap.SugaredLogger, strg CheckOrdersStorage) {
 	updateTicker := time.NewTicker(time.Second)
 	defer updateTicker.Stop()
 	for {
-		select {
-		case <-updateTicker.C:
-			for _, order := range strg.GetAccrualOrders() {
-				select{
-				case <- struct{}:
-					go accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
-				}
+		<-updateTicker.C
+		for _, order := range strg.GetAccrualOrders() {
+			secs, err := accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
+			if err != nil {
+				logger.Warnln("accural request error", err)
+			}
+			if secs > 0 {
+				logger.Debugln("wait accural system", secs, "seconds")
+				time.Sleep(time.Duration(secs) * time.Second)
 			}
 		}
 	}
@@ -108,15 +110,16 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 		return 0, fmt.Errorf("request error: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == http.StatusTooManyRequests {
 		wait, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 		if err != nil {
-			return 60, fmt.Errorf("too many requests default wait time. error: %w", err)
+			return 60, fmt.Errorf("too many requests. Default wait time. error: %w", err)
 		}
 		return wait, errors.New("too many  requests")
 	}
-
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("responce (%s) status code incorrect: %d", url, resp.StatusCode)
+	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, fmt.Errorf("responce body read error: %w", err)
@@ -124,8 +127,8 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	var item ordersStatus
 	err = json.Unmarshal(data, &item)
 	if err != nil {
-		return 0, fmt.Errorf("json conver error: %w", err)
+		return 0, fmt.Errorf("%v, %s, json conver error: %w", resp.Header.Get("Content-Encoding"), string(data), err)
 	}
-	strg.SetOrderData(item.Order, item.Accrual)
+	strg.SetOrderData(item.Order, item.Status, item.Accrual)
 	return 0, nil
 }

@@ -153,3 +153,43 @@ func (s *psqlStorage) GetWithdraws(ctx context.Context, uid int) ([]byte, error)
 	var withdraws []Withdraws
 	return s.getValues(ctx, uid, &withdraws)
 }
+
+func (s *psqlStorage) GetAccrualOrders() []string {
+	var orders []Orders
+	result := s.con.Order("id").Where("status NOT IN ?", []string{"INVALID", "PROCESSED"}).Find(&orders)
+	if result.Error != nil || result.RowsAffected == 0 {
+		return nil
+	}
+	numbers := make([]string, 0)
+	for _, item := range orders {
+		numbers = append(numbers, item.Number)
+	}
+	return numbers
+}
+func (s *psqlStorage) SetOrderData(number string, status string, balance float32) error {
+	var order Orders
+	var user Users
+	result := s.con.Where("number = ?", number).First(&order)
+	if result.Error != nil {
+		return fmt.Errorf("update order status, get order error: %w", result.Error)
+	}
+	result = s.con.Where("uid = ?", order.UID).First(&user)
+	if result.Error != nil {
+		return fmt.Errorf("update order status, get user error: %w", result.Error)
+	}
+	user.Balance += balance
+	order.Status = status
+	err := s.con.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&user).Error; err != nil {
+			return fmt.Errorf("update order status, update user balance error: %w", err)
+		}
+		if err := tx.Create(&order).Error; err != nil {
+			return fmt.Errorf("update order status, set order status error: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("update order status error: %w", err)
+	}
+	return nil
+}

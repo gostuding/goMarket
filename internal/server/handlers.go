@@ -23,6 +23,7 @@ const (
 )
 
 type Storage interface {
+	CheckOrdersStorage
 	Registration(context.Context, string, string, string, string) (int, error)
 	Login(context.Context, string, string, string, string) (int, error)
 	AddOrder(context.Context, int, string) (int, error)
