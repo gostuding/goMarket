@@ -174,7 +174,7 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	if result.Error != nil {
 		return fmt.Errorf("update order status, get order error: %w", result.Error)
 	}
-	result = s.con.Where("uid = ?", order.UID).First(&user)
+	result = s.con.Where("id = ?", order.UID).First(&user)
 	if result.Error != nil {
 		return fmt.Errorf("update order status, get user error: %w", result.Error)
 	}
