@@ -184,7 +184,7 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 		if err := tx.Save(&user).Error; err != nil {
 			return fmt.Errorf("update order status, update user balance error: %w", err)
 		}
-		if err := tx.Create(&order).Error; err != nil {
+		if err := tx.Save(&order).Error; err != nil {
 			return fmt.Errorf("update order status, set order status error: %w", err)
 		}
 		return nil
