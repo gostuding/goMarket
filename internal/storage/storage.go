@@ -166,6 +166,7 @@ func (s *psqlStorage) GetAccrualOrders() []string {
 	}
 	return numbers
 }
+
 func (s *psqlStorage) SetOrderData(number string, status string, balance float32) error {
 	var order Orders
 	var user Users

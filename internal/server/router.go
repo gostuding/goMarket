@@ -87,6 +87,7 @@ func timeRequest(url string, logger *zap.SugaredLogger, strg CheckOrdersStorage)
 	for {
 		<-updateTicker.C
 		for _, order := range strg.GetAccrualOrders() {
+			logger.Debugln("order accrual request", order)
 			secs, err := accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
 			if err != nil {
 				logger.Warnln("accural request error", err)
@@ -129,6 +130,5 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("%v, %s, json conver error: %w", resp.Header.Get("Content-Encoding"), string(data), err)
 	}
-	strg.SetOrderData(item.Order, item.Status, item.Accrual)
-	return 0, nil
+	return 0, strg.SetOrderData(item.Order, item.Status, item.Accrual)
 }

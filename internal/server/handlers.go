@@ -203,6 +203,7 @@ func OrdersAdd(args RequestResponce) {
 	args.logger.Debugln("add order status", status)
 	args.w.WriteHeader(status)
 }
+
 func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
 	args.logger.Debug(name, "list request")
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
@@ -228,6 +229,7 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 		args.logger.Warnln(writeResponceErrorString, err)
 	}
 }
+
 func OrdersList(args RequestResponce) {
 	getListCommon(&args, "orders", args.strg.GetOrders)
 }
