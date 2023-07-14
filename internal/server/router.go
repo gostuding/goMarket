@@ -130,5 +130,6 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("json conver error: %w", err)
 	}
+	fmt.Println("ORDER ACCURAL DATA", string(data))
 	return 0, strg.SetOrderData(item.Order, item.Status, item.Accrual)
 }

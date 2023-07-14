@@ -44,9 +44,6 @@ func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, e
 func checkAuthToken(r *http.Request, key []byte) (int, error) {
 	token := r.Header.Get(authString)
 	if token == "" {
-		for key, val := range r.Header {
-			fmt.Println(key, val)
-		}
 		return 0, errors.New("token is empty")
 	}
 	claims := &authJWTStruct{}
