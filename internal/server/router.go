@@ -45,8 +45,17 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		middlewares.GzipMiddleware(logger), middleware.Recoverer)
 
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
-		rr := RequestResponce{r: r, w: w, strg: strg, logger: logger}
-		Registration(&RegisterStruct{RequestResponce: rr, key: key, tokenLiveTime: tokenLiveTime})
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			logger.Warnln("read request body error: %w", err)
+			return
+		}
+		token, status, err := Register(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tokenLiveTime)
+		if err != nil {
+			logger.Warnln("registration error", err)
+		}
+		w.Header().Set(authHeader, token)
+		w.WriteHeader(status)
 	})
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
 		rr := RequestResponce{r: r, w: w, strg: strg, logger: logger}

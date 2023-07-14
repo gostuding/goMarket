@@ -48,6 +48,7 @@ type Withdraw struct {
 	Sum   float32 `json:"sum"`
 }
 
+// TODO удалить после рефакторинга
 func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -64,6 +65,19 @@ func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
 	return &user, nil
 }
 
+func isValidateLoginPassword(body []byte) (*LoginPassword, error) {
+	var user LoginPassword
+	err := json.Unmarshal(body, &user)
+	if err != nil {
+		return nil, fmt.Errorf("body convert to json error: %w", err)
+	}
+	if user.Login == "" || user.Password == "" {
+		return nil, errors.New("empty values for registration error")
+	}
+	return &user, nil
+}
+
+// TODO удалить после рефкторинга
 func addToken(args *RegisterStruct, uid int, login string) {
 	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
 	if err != nil {
@@ -105,6 +119,7 @@ func checkOrderNumber(order string) error {
 	return fmt.Errorf("order control summ error. Order: %s", order)
 }
 
+// TODO функция заменена. Удалить после тестов
 func Registration(args *RegisterStruct) {
 	user, err := validateLoginPassword(args.r)
 	if err != nil {
@@ -132,6 +147,33 @@ func Registration(args *RegisterStruct) {
 	}
 	args.logger.Debugf("new user success registrated: '%s'", user.Login)
 	addToken(args, uid, user.Login)
+}
+
+func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg Storage, tokenLiveTime int) (string, int, error) {
+	user, err := isValidateLoginPassword(body)
+	if err != nil {
+		return "", http.StatusBadRequest, err
+	}
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return "", http.StatusBadRequest, fmt.Errorf("remote ip incorrect: %w", err)
+	}
+	uid, err := strg.Registration(ctx, user.Login, user.Password, ua, ip)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		status := http.StatusInternalServerError
+		err = fmt.Errorf(gormError, err)
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			status = http.StatusConflict
+			err = fmt.Errorf("user registrating duplicate error: '%s'", user.Login)
+		}
+		return "", status, err
+	}
+	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, user.Login, ip)
+	if err != nil {
+		return "", http.StatusInternalServerError, fmt.Errorf("token generation error: %w", err)
+	}
+	return token, http.StatusOK, nil
 }
 
 func Login(args *RegisterStruct) {
