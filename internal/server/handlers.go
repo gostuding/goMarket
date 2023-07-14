@@ -102,7 +102,7 @@ func checkOrderNumber(order string) error {
 	if summ%10 == 0 {
 		return nil
 	}
-	return errors.New(fmt.Sprintf("order control summ error. Order: %s", order))
+	return fmt.Errorf("order control summ error. Order: %s", order)
 }
 
 func Registration(args *RegisterStruct) {

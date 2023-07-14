@@ -113,8 +113,9 @@ func (s *psqlStorage) GetUserBalance(ctx context.Context, uid int) ([]byte, erro
 	}
 	data, err := json.Marshal(user)
 	if err != nil {
-		return nil, fmt.Errorf("balance convert error: %w", err)
+		return nil, fmt.Errorf("convert user to json error: %w", err)
 	}
+	fmt.Println("GET BALANCE", user)
 	return data, nil
 }
 
@@ -181,7 +182,7 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	user.Balance = user.Balance + balance
 	order.Status = status
 	order.Accrual = balance
-	fmt.Println("USER BALANCE", user.Balance, "GET BALANCE", balance, "ORDER STATUS", status, "ORDER NUMBER", number)
+	fmt.Println("USER", user.ID, "BALANCE", user.Balance, "GET BALANCE", balance, "ORDER STATUS", status, "ORDER NUMBER", number)
 	err := s.con.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&user).Error; err != nil {
 			return fmt.Errorf("user balance update error: %w", err)
