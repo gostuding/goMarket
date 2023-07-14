@@ -172,25 +172,26 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	var user Users
 	result := s.con.Where("number = ?", number).First(&order)
 	if result.Error != nil {
-		return fmt.Errorf("update order status, get order error: %w", result.Error)
+		return fmt.Errorf("update order status, get order (%s) error: %w", number, result.Error)
 	}
 	result = s.con.Where("id = ?", order.UID).First(&user)
 	if result.Error != nil {
-		return fmt.Errorf("update order status, get user error: %w", result.Error)
+		return fmt.Errorf("update order status, get user (%d) error: %w", order.UID, result.Error)
 	}
 	user.Balance += balance
 	order.Status = status
+	order.Accrual = balance
 	err := s.con.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&user).Error; err != nil {
-			return fmt.Errorf("update order status, update user balance error: %w", err)
+			return fmt.Errorf("user balance update error: %w", err)
 		}
 		if err := tx.Save(&order).Error; err != nil {
-			return fmt.Errorf("update order status, set order status error: %w", err)
+			return fmt.Errorf("update order status and accural error: %w", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("update order status error: %w", err)
+		return fmt.Errorf("update order status transaction error: %w", err)
 	}
 	return nil
 }

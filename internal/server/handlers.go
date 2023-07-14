@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"github.com/jackc/pgerrcode"
@@ -78,14 +77,7 @@ func addToken(args *RegisterStruct, uid int, login string) {
 		args.logger.Warnf("token generation error: %w", err)
 		return
 	}
-	args.w.Header().Add("Authorization", token)
-	cookie := &http.Cookie{
-		Name:    "token",
-		Value:   token,
-		MaxAge:  args.tokenLiveTime * int(time.Hour/time.Millisecond),
-		Expires: time.Now().Add(time.Duration(args.tokenLiveTime) * time.Hour),
-	}
-	http.SetCookie(args.w, cookie)
+	args.w.Header().Add(authHeader, token)
 	args.w.WriteHeader(http.StatusOK)
 }
 
@@ -110,7 +102,7 @@ func checkOrderNumber(order string) error {
 	if summ%10 == 0 {
 		return nil
 	}
-	return errors.New("order control summ not equal")
+	return errors.New(fmt.Sprintf("order control summ error. Order: %s", order))
 }
 
 func Registration(args *RegisterStruct) {
@@ -155,8 +147,7 @@ func Login(args *RegisterStruct) {
 		args.logger.Warnf(validateError, err)
 		return
 	}
-	uid, err := args.strg.Login(args.r.Context(), user.Login,
-		user.Password, args.r.UserAgent(), ip)
+	uid, err := args.strg.Login(args.r.Context(), user.Login, user.Password, args.r.UserAgent(), ip)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			args.w.WriteHeader(http.StatusUnauthorized)
@@ -205,7 +196,7 @@ func OrdersAdd(args RequestResponce) {
 }
 
 func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
-	args.logger.Debug(name, "list request")
+	args.logger.Debugln(name, "list request")
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
 	if !ok {
