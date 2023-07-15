@@ -182,7 +182,7 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	if result.Error != nil {
 		return fmt.Errorf("update order status, get user (%d) error: %w", order.UID, result.Error)
 	}
-	user.Balance = user.Balance + balance
+	user.Balance += balance
 	order.Status = status
 	order.Accrual = balance
 	err := s.con.Transaction(func(tx *gorm.DB) error {

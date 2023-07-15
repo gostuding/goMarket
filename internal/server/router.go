@@ -70,7 +70,6 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		}
 		w.Header().Set(authHeader, token)
 		w.WriteHeader(status)
-
 	})
 
 	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
@@ -131,11 +130,12 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("request error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // <- senselessly
 	if resp.StatusCode == http.StatusTooManyRequests {
 		wait, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 		if err != nil {
-			return 60, fmt.Errorf("too many requests. Default wait time. error: %w", err)
+			wait = 60 //nolit:gomnd // <- default value
+			return wait, fmt.Errorf("too many requests. Default wait time. error: %w", err)
 		}
 		return wait, errors.New("too many  requests")
 	}
@@ -151,5 +151,5 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("json conver error: %w", err)
 	}
-	return 0, strg.SetOrderData(item.Order, item.Status, item.Accrual)
+	return 0, strg.SetOrderData(item.Order, item.Status, item.Accrual) //nolint:wrapcheck // <- wrapped early
 }

@@ -24,7 +24,6 @@ func TestRegister(t *testing.T) {
 	m.EXPECT().Registration(ctx, "user", "1", "ua", "127.0.0.1").Return(0, errors.New("database error"))
 
 	type args struct {
-		ctx           context.Context
 		body          []byte
 		key           []byte
 		remoteAddr    string
@@ -35,16 +34,15 @@ func TestRegister(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      args
-		wantCheck bool
 		want      string
 		want1     int
+		wantCheck bool
 		wantErr   bool
 	}{
 		{
 			name: "Успешная регистрация",
 			args: args{
 				body:       []byte(`{"login": "admin", "password": "1"}`),
-				ctx:        context.Background(),
 				key:        []byte("default"),
 				remoteAddr: "127.0.0.1:9000",
 				ua:         "ua",
@@ -59,7 +57,6 @@ func TestRegister(t *testing.T) {
 			name: "Повторная регистрация пользователя",
 			args: args{
 				body:       []byte(`{"login": "repeat", "password": "1"}`),
-				ctx:        context.Background(),
 				key:        []byte("default"),
 				remoteAddr: "127.0.0.1:9000",
 				ua:         "ua",
@@ -74,7 +71,6 @@ func TestRegister(t *testing.T) {
 			name: "Пустой запрос на регистрацию пользователя",
 			args: args{
 				body:       nil,
-				ctx:        context.Background(),
 				key:        []byte("default"),
 				remoteAddr: "127.0.0.1:9000",
 				ua:         "ua",
@@ -89,7 +85,6 @@ func TestRegister(t *testing.T) {
 			name: "Ошибка базы данных",
 			args: args{
 				body:       []byte(`{"login": "user", "password": "1"}`),
-				ctx:        context.Background(),
 				key:        []byte("default"),
 				remoteAddr: "127.0.0.1:9000",
 				ua:         "ua",
@@ -104,7 +99,6 @@ func TestRegister(t *testing.T) {
 			name: "Ошибка переданного ip",
 			args: args{
 				body:       []byte(`{"login": "user", "password": "1"}`),
-				ctx:        context.Background(),
 				key:        []byte("default"),
 				remoteAddr: "127.0.0.9000",
 				ua:         "ua",
@@ -119,7 +113,8 @@ func TestRegister(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := Register(tt.args.ctx, tt.args.body, tt.args.key, tt.args.remoteAddr, tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
+			got, got1, err := Register(ctx, tt.args.body, tt.args.key, tt.args.remoteAddr,
+				tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Register() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -144,7 +139,6 @@ func TestLoginFunc(t *testing.T) {
 	m.EXPECT().Login(ctx, "user", "1", "ua", "127.0.0.1").Return(0, errors.New("internal error"))
 
 	type args struct {
-		ctx           context.Context
 		body          []byte
 		key           []byte
 		remoteAddr    string
@@ -155,15 +149,14 @@ func TestLoginFunc(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      args
-		checkWant bool
 		want      string
 		want1     int
+		checkWant bool
 		wantErr   bool
 	}{
 		{
 			name: "Успешная авторизация",
 			args: args{
-				ctx:           ctx,
 				body:          []byte(`{"login": "admin", "password": "1"}`),
 				key:           []byte("default"),
 				remoteAddr:    "127.0.0.1:9000",
@@ -179,7 +172,6 @@ func TestLoginFunc(t *testing.T) {
 		{
 			name: "Пользователь не найден",
 			args: args{
-				ctx:           ctx,
 				body:          []byte(`{"login": "noUser", "password": "1"}`),
 				key:           []byte("default"),
 				remoteAddr:    "127.0.0.1:9000",
@@ -195,7 +187,6 @@ func TestLoginFunc(t *testing.T) {
 		{
 			name: "Внутреняя ошибка БД",
 			args: args{
-				ctx:           ctx,
 				body:          []byte(`{"login": "user", "password": "1"}`),
 				key:           []byte("default"),
 				remoteAddr:    "127.0.0.1:9000",
@@ -212,7 +203,8 @@ func TestLoginFunc(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := LoginFunc(tt.args.ctx, tt.args.body, tt.args.key, tt.args.remoteAddr, tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
+			got, got1, err := LoginFunc(ctx, tt.args.body, tt.args.key, tt.args.remoteAddr,
+				tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoginFunc() error = %v, wantErr %v", err, tt.wantErr)
 				return

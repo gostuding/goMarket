@@ -10,7 +10,7 @@ const (
 	jsonConvertEerrorString  = "convert to json error"
 	uidConvertErrorString    = "uid convert error"
 	uidContextTypeError      = "context uid is not int"
-	incorrectIpErroString    = "remote ip incorrect: %w"
+	incorrectIPErroString    = "remote ip incorrect: %w"
 	validateError            = "request validate error: %w"
 	gormError                = "gorm error: %w"
 	tokenGenerateError       = "token generation error: %w"

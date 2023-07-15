@@ -73,14 +73,15 @@ func checkOrderNumber(order string) error {
 	return fmt.Errorf("order control summ error. Order: %s", order)
 }
 
-func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg Storage, tokenLiveTime int) (string, int, error) {
+func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
+	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
 	if err != nil {
 		return "", http.StatusBadRequest, err
 	}
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return "", http.StatusBadRequest, fmt.Errorf(incorrectIpErroString, err)
+		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
 	uid, err := strg.Registration(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
@@ -100,14 +101,15 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg
 	return token, http.StatusOK, nil
 }
 
-func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string, strg Storage, tokenLiveTime int) (string, int, error) {
+func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
+	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
 	if err != nil {
 		return "", http.StatusBadRequest, err
 	}
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return "", http.StatusBadRequest, fmt.Errorf(incorrectIpErroString, err)
+		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
 	uid, err := strg.Login(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
