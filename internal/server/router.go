@@ -47,7 +47,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			logger.Warnln("read request body error: %w", err)
+			logger.Warnln(readRequestErrorString, err)
 			return
 		}
 		token, status, err := Register(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tokenLiveTime)
@@ -57,10 +57,22 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		w.Header().Set(authHeader, token)
 		w.WriteHeader(status)
 	})
+
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
-		rr := RequestResponce{r: r, w: w, strg: strg, logger: logger}
-		Login(&RegisterStruct{RequestResponce: rr, key: key, tokenLiveTime: tokenLiveTime})
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			logger.Warnln(readRequestErrorString, err)
+			return
+		}
+		token, status, err := LoginFunc(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tokenLiveTime)
+		if err != nil {
+			logger.Warnln("user login error", err)
+		}
+		w.Header().Set(authHeader, token)
+		w.WriteHeader(status)
+
 	})
+
 	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
 		OrdersAdd(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})

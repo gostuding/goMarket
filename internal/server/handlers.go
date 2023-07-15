@@ -16,11 +16,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	validateError = "request validate error: %w"
-	gormError     = "gorm error: %w"
-)
-
 type Storage interface {
 	CheckOrdersStorage
 	Registration(context.Context, string, string, string, string) (int, error)
@@ -30,12 +25,6 @@ type Storage interface {
 	GetUserBalance(context.Context, int) ([]byte, error)
 	AddWithdraw(context.Context, int, string, float32) (int, error)
 	GetWithdraws(context.Context, int) ([]byte, error)
-}
-
-type RegisterStruct struct {
-	RequestResponce
-	key           []byte
-	tokenLiveTime int
 }
 
 type LoginPassword struct {
@@ -48,23 +37,6 @@ type Withdraw struct {
 	Sum   float32 `json:"sum"`
 }
 
-// TODO удалить после рефакторинга
-func validateLoginPassword(r *http.Request) (*LoginPassword, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read request body error: %w", err)
-	}
-	var user LoginPassword
-	err = json.Unmarshal(body, &user)
-	if err != nil {
-		return nil, fmt.Errorf("body convert to json error: %w", err)
-	}
-	if user.Login == "" || user.Password == "" {
-		return nil, errors.New("empty values for registration error")
-	}
-	return &user, nil
-}
-
 func isValidateLoginPassword(body []byte) (*LoginPassword, error) {
 	var user LoginPassword
 	err := json.Unmarshal(body, &user)
@@ -75,24 +47,6 @@ func isValidateLoginPassword(body []byte) (*LoginPassword, error) {
 		return nil, errors.New("empty values for registration error")
 	}
 	return &user, nil
-}
-
-// TODO удалить после рефкторинга
-func addToken(args *RegisterStruct, uid int, login string) {
-	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
-	if err != nil {
-		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnf("user ip addres error: %w", err)
-		return
-	}
-	token, err := middlewares.CreateToken(args.key, args.tokenLiveTime, uid, args.r.UserAgent(), login, ip)
-	if err != nil {
-		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnf("token generation error: %w", err)
-		return
-	}
-	args.w.Header().Add(authHeader, token)
-	args.w.WriteHeader(http.StatusOK)
 }
 
 func checkOrderNumber(order string) error {
@@ -119,36 +73,6 @@ func checkOrderNumber(order string) error {
 	return fmt.Errorf("order control summ error. Order: %s", order)
 }
 
-// TODO функция заменена. Удалить после тестов
-func Registration(args *RegisterStruct) {
-	user, err := validateLoginPassword(args.r)
-	if err != nil {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnf(validateError, err)
-		return
-	}
-	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
-	if err != nil {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnf(validateError, err)
-		return
-	}
-	uid, err := args.strg.Registration(args.r.Context(), user.Login, user.Password, args.r.UserAgent(), ip)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			args.w.WriteHeader(http.StatusConflict)
-			args.logger.Warnln("user duplicate error", user.Login)
-		} else {
-			args.w.WriteHeader(http.StatusInternalServerError)
-			args.logger.Warnf(gormError, err)
-		}
-		return
-	}
-	args.logger.Debugf("new user success registrated: '%s'", user.Login)
-	addToken(args, uid, user.Login)
-}
-
 func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
 	if err != nil {
@@ -156,7 +80,7 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg
 	}
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return "", http.StatusBadRequest, fmt.Errorf("remote ip incorrect: %w", err)
+		return "", http.StatusBadRequest, fmt.Errorf(incorrectIpErroString, err)
 	}
 	uid, err := strg.Registration(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
@@ -171,37 +95,33 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string, strg
 	}
 	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, user.Login, ip)
 	if err != nil {
-		return "", http.StatusInternalServerError, fmt.Errorf("token generation error: %w", err)
+		return "", http.StatusInternalServerError, fmt.Errorf(tokenGenerateError, err)
 	}
 	return token, http.StatusOK, nil
 }
 
-func Login(args *RegisterStruct) {
-	user, err := validateLoginPassword(args.r)
+func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string, strg Storage, tokenLiveTime int) (string, int, error) {
+	user, err := isValidateLoginPassword(body)
 	if err != nil {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnf(validateError, err)
-		return
+		return "", http.StatusBadRequest, err
 	}
-	ip, _, err := net.SplitHostPort(args.r.RemoteAddr)
+	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnf(validateError, err)
-		return
+		return "", http.StatusBadRequest, fmt.Errorf(incorrectIpErroString, err)
 	}
-	uid, err := args.strg.Login(args.r.Context(), user.Login, user.Password, args.r.UserAgent(), ip)
+	uid, err := strg.Login(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			args.w.WriteHeader(http.StatusUnauthorized)
-			args.logger.Warnf("user not found in system. Login: '%s'", user.Login)
+			return "", http.StatusUnauthorized, fmt.Errorf("user not found in system. Login: '%s'", user.Login)
 		} else {
-			args.w.WriteHeader(http.StatusInternalServerError)
-			args.logger.Warnf(gormError, err)
+			return "", http.StatusInternalServerError, fmt.Errorf(gormError, err)
 		}
-		return
 	}
-	args.logger.Debugf("user login success: '%s'", user.Login)
-	addToken(args, uid, user.Login)
+	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, user.Login, ip)
+	if err != nil {
+		return "", http.StatusInternalServerError, fmt.Errorf(tokenGenerateError, err)
+	}
+	return token, http.StatusOK, nil
 }
 
 func OrdersAdd(args RequestResponce) {
