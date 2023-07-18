@@ -1,6 +1,9 @@
 package server
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -8,9 +11,29 @@ import (
 )
 
 func Test_accrualRequest(t *testing.T) {
+
+	// TODO заменить на аргументы через GET, ?args=... r.Form.Get("id")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch string(body) {
+		case "1":
+			w.WriteHeader(http.StatusTooManyRequests)
+		case "2":
+			w.WriteHeader(http.StatusOK)
+		case "3":
+			w.Write([]byte(`{"status":  "accrual": 0}`))
+		}
+	}))
+	defer server.Close()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockStorage(ctrl)
-	m.EXPECT().SetOrderData("123", "NEW", 500).Return(nil)
+	m.EXPECT().SetOrderData("uid", "1", 0).Return(nil)
 
 	type args struct {
 		url  string
