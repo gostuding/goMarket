@@ -1,7 +1,7 @@
 package server
 
 import (
-	"io"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,29 +11,26 @@ import (
 )
 
 func Test_accrualRequest(t *testing.T) {
-
-	// TODO заменить на аргументы через GET, ?args=... r.Form.Get("id")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
+		if err := r.ParseForm(); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		switch string(body) {
+		switch string(r.Form.Get("id")) {
 		case "1":
 			w.WriteHeader(http.StatusTooManyRequests)
 		case "2":
-			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"order": "2", "status": "NEW", "accrual": 0}`))
 		case "3":
 			w.Write([]byte(`{"status":  "accrual": 0}`))
+		default:
+			w.Write([]byte(""))
 		}
 	}))
 	defer server.Close()
-
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockStorage(ctrl)
-	m.EXPECT().SetOrderData("uid", "1", 0).Return(nil)
+	m.EXPECT().SetOrderData("2", "NEW", float32(0)).Return(nil)
 
 	type args struct {
 		url  string
@@ -45,14 +42,40 @@ func Test_accrualRequest(t *testing.T) {
 		want    int
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Ограничение ожидания",
+			args: args{
+				url:  fmt.Sprintf("%s/?id=1", server.URL),
+				strg: m,
+			},
+			want:    60,
+			wantErr: true,
+		},
+		{
+			name: "Без ошибок",
+			args: args{
+				url:  fmt.Sprintf("%s/?id=2", server.URL),
+				strg: m,
+			},
+			want:    0,
+			wantErr: false,
+		},
+		{
+			name: "Ошибка в json ответе",
+			args: args{
+				url:  fmt.Sprintf("%s/?id=3", server.URL),
+				strg: m,
+			},
+			want:    0,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := accrualRequest(tt.args.url, tt.args.strg)
-			if (err != nil) != tt.wantErr {
+			if err != nil && !tt.wantErr {
 				t.Errorf("accrualRequest() error = %v, wantErr %v", err, tt.wantErr)
-				return
 			}
 			if got != tt.want {
 				t.Errorf("accrualRequest() = %v, want %v", got, tt.want)
