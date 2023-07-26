@@ -5,18 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/cors"
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"go.uber.org/zap"
 
 	_ "github.com/gostuding/goMarket/docs"
-	"github.com/swaggo/http-swagger/v2"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 type RequestResponce struct {
@@ -45,6 +46,12 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", "/favicon.ico")
 
 	router := chi.NewRouter()
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{"https://*", "http://*"},
+		AllowedMethods: []string{"HEAD", "GET", "POST", "OPTIONS"},
+	}))
+
 	router.Use(middleware.RealIP, middlewares.AuthMiddleware(logger, exceptURLs, loginURL, key),
 		middlewares.GzipMiddleware(logger), middleware.Recoverer)
 
@@ -118,7 +125,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	))
 
 	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile("./static/icon.png")
+		fileBytes, err := os.ReadFile("./static/icon.png")
 		if err != nil {
 			logger.Warnln("icon not found", err)
 			w.WriteHeader(http.StatusNotFound)

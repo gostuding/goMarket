@@ -1,23 +1,109 @@
 basePath: /api
 definitions:
   server.LoginPassword:
+    description: Модель для отправки логина и пароля пользователя
     properties:
       login:
+        description: Логин пользователя
         type: string
       password:
+        description: Пароль пользователя
         type: string
     type: object
-host: localhost
+  server.Withdraw:
+    properties:
+      order:
+        type: string
+      sum:
+        type: number
+    type: object
+  storage.Orders:
+    properties:
+      accrual:
+        type: number
+      number:
+        type: string
+      status:
+        type: string
+      uploaded_at:
+        type: string
+    type: object
+  storage.Withdraws:
+    properties:
+      order:
+        type: string
+      processed_at:
+        type: string
+      sum:
+        type: number
+    type: object
+host: localhost:8080
 info:
   contact:
     email: mag-nat1@yandex.ru
     name: API Support
   description: API для микросервиса накопительной системы лояльности «Гофермарт»
-  termsOfService: http://swagger.io/terms/
   title: Gophermart API
   version: "1.0"
 paths:
-  /api/user/login:
+  /user/balance:
+    get:
+      parameters:
+      - description: Токен авторизации
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Баланс пользователя
+          schema:
+            type: string
+        "401":
+          description: Пользователь не авторизован
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Запрос баланса пользователя
+      tags:
+      - Баланс пользователя
+  /user/balance/withdraw:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Номер заказа в счет которого списываются баллы
+        in: body
+        name: withdraw
+        required: true
+        schema:
+          $ref: '#/definitions/server.Withdraw'
+      - description: Токен авторизации
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Списание успешно добавлено
+        "400":
+          description: Ошибка в теле запроса. Тело запроса не соответствует формату
+            json
+        "401":
+          description: Пользователь не авторизован
+        "402":
+          description: Недостаточно средств
+        "409":
+          description: Заказ уже был зарегистрирован ранее
+        "422":
+          description: Номер заказа не прошёл проверку подлинности
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Запрос на списание баллов в счёт другого заказа
+      tags:
+      - Списание баллов
+  /user/login:
     post:
       consumes:
       - application/json
@@ -28,10 +114,134 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/server.LoginPassword'
+      responses:
+        "200":
+          description: Успешная авторизация
+          headers:
+            Authorization:
+              description: Токен авторизации
+              type: string
+        "400":
+          description: Ошибка в теле запроса. Тело запроса не соответствует json формату
+        "401":
+          description: Логин или пароль не найден
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Авторизация пользователя в микросервисе
+      tags:
+      - Авторизация
+  /user/orders:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: Токен авторизации
+        in: header
+        name: Authorization
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
-      summary: Авторизация пользователя в микросервисе
+          description: Список зарегистрированных за пользователем заказов
+          schema:
+            items:
+              $ref: '#/definitions/storage.Orders'
+            type: array
+        "204":
+          description: Нет данных для ответа
+        "401":
+          description: Пользователь не авторизован
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Запрос списка заказов, зарегистрированных за пользователем
+      tags:
+      - Заказы
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Номер заказа
+        in: body
+        name: order
+        required: true
+        schema:
+          type: string
+      - description: Токен авторизации
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Заказ уже был добавлен пользователем ранее
+        "202":
+          description: Заказ успешно зарегистрирован за пользователем
+        "400":
+          description: Ошибка в теле запроса. Тело запроса пустое
+        "401":
+          description: Пользователь не авторизован
+        "409":
+          description: Заказ зарегистрирован за другим пользователем
+        "422":
+          description: Номер заказа не прошёл проверку подлинности
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Добавление номера заказа пользователя
+      tags:
+      - Заказы
+  /user/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Логи и пароль пользователя в формате json
+        in: body
+        name: params
+        required: true
+        schema:
+          $ref: '#/definitions/server.LoginPassword'
+      responses:
+        "200":
+          description: Успешная регистрация пользователя
+          headers:
+            Authorization:
+              description: Токен авторизации
+              type: string
+        "400":
+          description: Ошибка в теле запроса. Тело запроса не соответствует json формату
+        "409":
+          description: Такой логин уже используется другим пользователем
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Регистрация нового пользователя в микросервисе
+      tags:
+      - Авторизация
+  /user/withdrawals:
+    get:
+      parameters:
+      - description: Токен авторизации
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список списаний
+          schema:
+            items:
+              $ref: '#/definitions/storage.Withdraws'
+            type: array
+        "204":
+          description: Нет данных для ответа
+        "401":
+          description: Пользователь не авторизован
+        "500":
+          description: Внутренняя ошибка сервиса
+      summary: Запрос списка списаний баллов
+      tags:
+      - Списание баллов
 swagger: "2.0"

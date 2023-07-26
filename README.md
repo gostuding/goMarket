@@ -14,3 +14,8 @@ git clone https://github.com/gostuding/goMarket
 # Запуск локальных тестов
 
 `go test ./...`
+
+# Swager
+
+1. Запустить сервер командой `go run cmd/gophermart/.`
+2. Открыть браузер по адресу: `http://localhost:8080/swagger/`

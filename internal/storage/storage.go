@@ -21,6 +21,11 @@ type psqlStorage struct {
 	con *gorm.DB
 }
 
+type balanceStruct struct {
+	Current   float32 `json:"current"`
+	Withdrawn float32 `json:"withdrawn"`
+}
+
 func NewPSQLStorage(connectionString string) (*psqlStorage, error) {
 	db, err := gorm.Open(postgres.Open(connectionString), &gorm.Config{
 		Logger: logger.Discard,
@@ -107,15 +112,11 @@ func (s *psqlStorage) GetOrders(ctx context.Context, uid int) ([]byte, error) {
 
 func (s *psqlStorage) GetUserBalance(ctx context.Context, uid int) ([]byte, error) {
 	var user Users
-	type balance struct {
-		Current   float32 `json:"current"`
-		Withdrawn float32 `json:"withdrawn"`
-	}
 	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user) //nolint:all // more clearly
 	if result.Error != nil {
 		return nil, fmt.Errorf("get user balance error: %w", result.Error)
 	}
-	data, err := json.Marshal(balance{Current: user.Balance, Withdrawn: user.Withdrawn})
+	data, err := json.Marshal(balanceStruct{Current: user.Balance, Withdrawn: user.Withdrawn})
 	if err != nil {
 		return nil, fmt.Errorf("convert user balance to json error: %w", err)
 	}

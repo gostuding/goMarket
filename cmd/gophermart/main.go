@@ -11,12 +11,11 @@ import (
 // @title Gophermart API
 // @version 1.0
 // @description API для микросервиса накопительной системы лояльности «Гофермарт»
-// @termsOfService http://swagger.io/terms/
 
 // @contact.name API Support
 // @contact.email mag-nat1@yandex.ru
 
-// @host localhost
+// @host localhost:8080
 // @BasePath /api
 
 func main() {
