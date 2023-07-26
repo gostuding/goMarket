@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -74,7 +75,7 @@ func AuthMiddleware(logger *zap.SugaredLogger, except []string,
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			for _, item := range except {
-				if item == r.URL.Path {
+				if strings.Contains(r.URL.Path, item) {
 					next.ServeHTTP(w, r)
 					return
 				}

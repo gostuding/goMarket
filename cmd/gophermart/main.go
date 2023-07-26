@@ -8,6 +8,17 @@ import (
 	"github.com/gostuding/goMarket/internal/storage"
 )
 
+// @title Gophermart API
+// @version 1.0
+// @description API для микросервиса накопительной системы лояльности «Гофермарт»
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.email mag-nat1@yandex.ru
+
+// @host localhost
+// @BasePath /api
+
 func main() {
 	cfg := server.NewConfig()
 	logger, err := logger.NewLogger()

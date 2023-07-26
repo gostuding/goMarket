@@ -70,7 +70,7 @@ func checkOrderNumber(order string) error {
 	if summ%10 == 0 {
 		return nil
 	}
-	return fmt.Errorf("order control summ error. Order: %s", order)
+	return fmt.Errorf("order control summ error. Order: '%s'", order)
 }
 
 func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
@@ -101,6 +101,13 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	return token, http.StatusOK, nil
 }
 
+// Login godoc
+// @Summary Авторизация пользователя в микросервисе
+// @Accept json
+// @Produce json
+// @Param params body LoginPassword true "Логи и пароль пользователя в формате json"
+// @Success 200
+// @Router /api/user/login [post]
 func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
@@ -126,37 +133,16 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	return token, http.StatusOK, nil
 }
 
-func OrdersAdd(args RequestResponce) {
-	body, err := io.ReadAll(args.r.Body)
+func OrdersAddFunc(ctx context.Context, order string, strg Storage) (int, error) {
+	err := checkOrderNumber(order)
 	if err != nil {
-		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnln(bodyReadError, err)
-		return
+		return http.StatusUnprocessableEntity, fmt.Errorf("check order error: %w", err)
 	}
-	if len(body) == 0 {
-		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnln("empty orders body")
-		return
-	}
-	order := string(body)
-	err = checkOrderNumber(order)
-	if err != nil {
-		args.w.WriteHeader(http.StatusUnprocessableEntity)
-		args.logger.Warnln(checkOrderErrorString, err)
-		return
-	}
-	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
+	uid, ok := ctx.Value(middlewares.AuthUID).(int)
 	if !ok {
-		args.w.WriteHeader(http.StatusUnauthorized)
-		args.logger.Warnln(uidContextTypeError)
-		return
+		return http.StatusUnauthorized, errors.New(uidContextTypeError)
 	}
-	status, err := args.strg.AddOrder(args.r.Context(), uid, order)
-	if err != nil {
-		args.logger.Warnln(err)
-	}
-	args.logger.Debugln("add order status", status)
-	args.w.WriteHeader(status)
+	return strg.AddOrder(ctx, uid, order)
 }
 
 func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {

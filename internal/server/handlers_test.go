@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/gostuding/goMarket/internal/mocks"
+	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
@@ -214,6 +215,72 @@ func TestLoginFunc(t *testing.T) {
 			}
 			if got1 != tt.want1 {
 				t.Errorf("LoginFunc() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
+func TestOrdersAddFunc(t *testing.T) {
+	type args struct {
+		ctx   context.Context
+		order string
+		strg  Storage
+	}
+
+	ctrl := gomock.NewController(t)
+	m := mocks.NewMockStorage(ctrl)
+	ctx := context.Background()
+	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 1), 1, "55875248746").Return(http.StatusAccepted, nil)
+	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 2), 2, "55875248746").Return(http.StatusConflict, nil)
+	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 2), 2, "2377225624").Return(http.StatusOK, nil)
+
+	tests := []struct {
+		name    string
+		args    args
+		want    int
+		wantErr bool
+	}{
+		{
+			name:    "Успешное добавление",
+			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 1), order: "55875248746", strg: m},
+			want:    http.StatusAccepted,
+			wantErr: false,
+		},
+		{
+			name:    "Неправильный номер заказа",
+			args:    args{ctx: ctx, order: "1", strg: m},
+			want:    http.StatusUnprocessableEntity,
+			wantErr: true,
+		},
+		{
+			name:    "Пользователь не авторизован",
+			args:    args{ctx: ctx, order: "55875248746", strg: m},
+			want:    http.StatusUnauthorized,
+			wantErr: true,
+		},
+		{
+			name:    "Заказ добавлен другим пользователем",
+			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 2), order: "55875248746", strg: m},
+			want:    http.StatusConflict,
+			wantErr: false,
+		},
+		{
+			name:    "Заказ был добавлен ранее этим пользователем",
+			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 2), order: "2377225624", strg: m},
+			want:    http.StatusOK,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := OrdersAddFunc(tt.args.ctx, tt.args.order, tt.args.strg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("OrdersAddFunc() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("OrdersAddFunc() = %v, want %v", got, tt.want)
 			}
 		})
 	}

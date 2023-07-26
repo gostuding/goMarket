@@ -24,5 +24,6 @@ vendor/
 
 
 .golangci.yml
-# test.py
+golint_run.sh
+test.py
 golangci-lint/

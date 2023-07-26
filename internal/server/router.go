@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"go.uber.org/zap"
+
+	_ "github.com/gostuding/goMarket/docs"
+	"github.com/swaggo/http-swagger/v2"
 )
 
 type RequestResponce struct {
@@ -38,7 +42,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
 	var userOrders = "/api/user/orders"
-	exceptURLs = append(exceptURLs, registerURL, loginURL)
+	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", "/favicon.ico")
 
 	router := chi.NewRouter()
 	router.Use(middleware.RealIP, middlewares.AuthMiddleware(logger, exceptURLs, loginURL, key),
@@ -47,6 +51,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			logger.Warnln(readRequestErrorString, err)
 			return
 		}
@@ -61,6 +66,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			logger.Warnln(readRequestErrorString, err)
 			return
 		}
@@ -73,19 +79,54 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	})
 
 	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
-		OrdersAdd(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			logger.Warnln(readRequestErrorString, err)
+			return
+		}
+		if len(body) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			logger.Warnln("empty add order request's body")
+			return
+		}
+		status, err := OrdersAddFunc(r.Context(), string(body), strg)
+		if err != nil {
+			logger.Warnln("add order error", err)
+		}
+		w.WriteHeader(status)
 	})
+
 	router.Get(userOrders, func(w http.ResponseWriter, r *http.Request) {
 		OrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
+
 	router.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
 		UserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
+
 	router.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
 		AddWithdraw(RequestResponce{r: r, w: w, strg: strg, logger: logger})
 	})
+
 	router.Get("/api/user/withdrawals", func(w http.ResponseWriter, r *http.Request) {
 		WithdrawsList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+	})
+
+	router.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
+
+	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile("./static/icon.png")
+		if err != nil {
+			logger.Warnln("icon not found", err)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(fileBytes)
 	})
 
 	return router
@@ -97,7 +138,7 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime)
-	go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
+	// go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
 

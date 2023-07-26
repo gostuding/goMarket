@@ -1,0 +1,37 @@
+basePath: /api
+definitions:
+  server.LoginPassword:
+    properties:
+      login:
+        type: string
+      password:
+        type: string
+    type: object
+host: localhost
+info:
+  contact:
+    email: mag-nat1@yandex.ru
+    name: API Support
+  description: API для микросервиса накопительной системы лояльности «Гофермарт»
+  termsOfService: http://swagger.io/terms/
+  title: Gophermart API
+  version: "1.0"
+paths:
+  /api/user/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Логи и пароль пользователя в формате json
+        in: body
+        name: params
+        required: true
+        schema:
+          $ref: '#/definitions/server.LoginPassword'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Авторизация пользователя в микросервисе
+swagger: "2.0"
