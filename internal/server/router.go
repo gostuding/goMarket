@@ -138,7 +138,7 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime)
-	// go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
+	go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
 
