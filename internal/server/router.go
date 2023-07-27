@@ -17,7 +17,6 @@ import (
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"go.uber.org/zap"
 
-	_ "github.com/gostuding/goMarket/docs"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
