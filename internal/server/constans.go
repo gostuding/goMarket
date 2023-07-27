@@ -2,6 +2,7 @@ package server
 
 const (
 	writeResponceErrorString = "responce body write error: %v"
+	iconPath                 = "/favicon.ico"
 	authHeader               = "Authorization"
 	contentTypeString        = "Content-Type"
 	ctApplicationJSONString  = "application/json"

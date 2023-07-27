@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,12 +39,29 @@ type ordersStatus struct {
 	Accrual float32 `json:"accrual"`
 }
 
+func LoginOrRegister(w http.ResponseWriter, r *http.Request, logger *zap.SugaredLogger, key []byte,
+	strg Storage, tlt int,
+	function func(context.Context, []byte, []byte, string, string, Storage, int) (string, int, error)) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logger.Warnln(readRequestErrorString, err)
+		return
+	}
+	token, status, err := function(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tlt)
+	if err != nil {
+		logger.Warnln("error", err)
+	}
+	w.Header().Set(authHeader, token)
+	w.WriteHeader(status)
+}
+
 func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTime int, address string) http.Handler {
 	exceptURLs := make([]string, 0)
 	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
 	var userOrders = "/api/user/orders"
-	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", "/favicon.ico")
+	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", iconPath)
 
 	router := chi.NewRouter()
 
@@ -58,33 +76,11 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		middlewares.GzipMiddleware(logger), middleware.Recoverer)
 
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			logger.Warnln(readRequestErrorString, err)
-			return
-		}
-		token, status, err := Register(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tokenLiveTime)
-		if err != nil {
-			logger.Warnln("registration error", err)
-		}
-		w.Header().Set(authHeader, token)
-		w.WriteHeader(status)
+		LoginOrRegister(w, r, logger, key, strg, tokenLiveTime, Register)
 	})
 
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			logger.Warnln(readRequestErrorString, err)
-			return
-		}
-		token, status, err := LoginFunc(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tokenLiveTime)
-		if err != nil {
-			logger.Warnln("user login error", err)
-		}
-		w.Header().Set(authHeader, token)
-		w.WriteHeader(status)
+		LoginOrRegister(w, r, logger, key, strg, tokenLiveTime, LoginFunc)
 	})
 
 	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
@@ -126,16 +122,18 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		httpSwagger.URL(fmt.Sprintf("http://%s/swagger/doc.json", address)),
 	))
 
-	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+	router.Get(iconPath, func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := os.ReadFile("./static/icon.png")
 		if err != nil {
 			logger.Warnln("icon not found", err)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Write(fileBytes)
+		_, err = w.Write(fileBytes)
+		if err != nil {
+			logger.Warnln("write icon file error", err)
+		}
 	})
 
 	return router

@@ -10,17 +10,14 @@ import (
 
 // @title Gophermart API
 // @version 1.0
-// @description API для микросервиса накопительной системы лояльности «Гофермарт»
-
 // @contact.name API Support
 // @contact.email mag-nat1@yandex.ru
-
 // @host localhost:8080
 // @BasePath /api
-
-//@securityDefinitions.apikey ApiKeyAuth
-//@in header
-//@name Authorization
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
+// @description API для микросервиса накопительной системы лояльности «Гофермарт».
 
 func main() {
 	cfg := server.NewConfig()

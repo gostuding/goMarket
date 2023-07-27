@@ -27,11 +27,8 @@ type Storage interface {
 	GetWithdraws(context.Context, int) ([]byte, error)
 }
 
-// @Description Модель для отправки логина и пароля пользователя
 type LoginPassword struct {
-	// Логин пользователя
-	Login string `json:"login"`
-	// Пароль пользователя
+	Login    string `json:"login"`
 	Password string `json:"password"`
 }
 
@@ -76,7 +73,7 @@ func checkOrderNumber(order string) error {
 	return fmt.Errorf("order control summ error. Order: '%s'", order)
 }
 
-// Register godoc
+// Register ...
 // @Tags Авторизация
 // @Summary Регистрация нового пользователя в микросервисе
 // @Accept json
@@ -86,7 +83,7 @@ func checkOrderNumber(order string) error {
 // @Header 200 {string} Authorization "Токен авторизации"
 // @failure 400 "Ошибка в теле запроса. Тело запроса не соответствует json формату"
 // @failure 409 "Такой логин уже используется другим пользователем"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
@@ -115,7 +112,7 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	return token, http.StatusOK, nil
 }
 
-// Login godoc
+// LoginFunc ...
 // @Tags Авторизация
 // @Summary Авторизация пользователя в микросервисе
 // @Accept json
@@ -125,7 +122,7 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 // @Header 200 {string} Authorization "Токен авторизации"
 // @failure 400 "Ошибка в теле запроса. Тело запроса не соответствует json формату"
 // @failure 401 "Логин или пароль не найден"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
@@ -151,7 +148,7 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	return token, http.StatusOK, nil
 }
 
-// AddOrder godoc
+// OrdersAddFunc ...
 // @Tags Заказы
 // @Summary Добавление номера заказа пользователя
 // @Accept json
@@ -165,7 +162,7 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 // @failure 401 "Пользователь не авторизован"
 // @failure 409 "Заказ зарегистрирован за другим пользователем"
 // @failure 422 "Номер заказа не прошёл проверку подлинности"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func OrdersAddFunc(ctx context.Context, order string, strg Storage) (int, error) {
 	err := checkOrderNumber(order)
 	if err != nil {
@@ -175,7 +172,7 @@ func OrdersAddFunc(ctx context.Context, order string, strg Storage) (int, error)
 	if !ok {
 		return http.StatusUnauthorized, errors.New(uidContextTypeError)
 	}
-	return strg.AddOrder(ctx, uid, order)
+	return strg.AddOrder(ctx, uid, order) //nolint:wrapcheck // <- wrapped in storage
 }
 
 func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
@@ -204,7 +201,7 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 	}
 }
 
-// OrdersList godoc
+// OrdersList ...
 // @Tags Заказы
 // @Summary Запрос списка заказов, зарегистрированных за пользователем
 // @Accept json
@@ -215,12 +212,12 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 // @Success 200 {array} storage.Orders "Список зарегистрированных за пользователем заказов"
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func OrdersList(args RequestResponce) {
 	getListCommon(&args, "orders", args.strg.GetOrders)
 }
 
-// UserBalance godoc
+// UserBalance ...
 // @Tags Баланс пользователя
 // @Summary Запрос баланса пользователя
 // @Produce json
@@ -229,7 +226,7 @@ func OrdersList(args RequestResponce) {
 // @Router /user/balance [get]
 // @Success 200 {object} storage.BalanceStruct "Баланс пользователя"
 // @failure 401 "Пользователь не авторизован"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func UserBalance(args RequestResponce) {
 	args.logger.Debug("user balance request")
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
@@ -251,7 +248,7 @@ func UserBalance(args RequestResponce) {
 	}
 }
 
-// AddWithdraw godoc
+// AddWithdraw ...
 // @Tags Списание баллов
 // @Summary Запрос на списание баллов в счёт другого заказа
 // @Accept json
@@ -265,7 +262,7 @@ func UserBalance(args RequestResponce) {
 // @failure 402 "Недостаточно средств"
 // @failure 409 "Заказ уже был зарегистрирован ранее"
 // @failure 422 "Номер заказа не прошёл проверку подлинности"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func AddWithdraw(args RequestResponce) {
 	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
@@ -301,7 +298,7 @@ func AddWithdraw(args RequestResponce) {
 	args.w.WriteHeader(status)
 }
 
-// WithdrawsList godoc
+// WithdrawsList ...
 // @Tags Списание баллов
 // @Summary Запрос списка списаний баллов
 // @Produce json
@@ -311,7 +308,7 @@ func AddWithdraw(args RequestResponce) {
 // @Success 200 {array} storage.Withdraws "Список списаний"
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
-// @failure 500 "Внутренняя ошибка сервиса"
+// @failure 500 "Внутренняя ошибка сервиса".
 func WithdrawsList(args RequestResponce) {
 	getListCommon(&args, "withdraws", args.strg.GetWithdraws)
 }

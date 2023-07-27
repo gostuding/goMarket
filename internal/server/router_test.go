@@ -16,15 +16,15 @@ func Test_accrualRequest(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		switch string(r.Form.Get("id")) {
+		switch r.Form.Get("id") {
 		case "1":
 			w.WriteHeader(http.StatusTooManyRequests)
 		case "2":
-			w.Write([]byte(`{"order": "2", "status": "NEW", "accrual": 0}`))
+			w.Write([]byte(`{"order": "2", "status": "NEW", "accrual": 0}`)) //nolint:all // <- senselessly
 		case "3":
-			w.Write([]byte(`{"status":  "accrual": 0}`))
+			w.Write([]byte(`{"status":  "accrual": 0}`)) //nolint:all // <- senselessly
 		default:
-			w.Write([]byte(""))
+			w.Write([]byte("")) //nolint:all // <- senselessly
 		}
 	}))
 	defer server.Close()
