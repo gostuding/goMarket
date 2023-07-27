@@ -21,6 +21,11 @@ const docTemplate = `{
     "paths": {
         "/user/balance": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -33,15 +38,14 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "Баланс пользователя",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/storage.BalanceStruct"
                         }
                     },
                     "401": {
@@ -55,6 +59,11 @@ const docTemplate = `{
         },
         "/user/balance/withdraw": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -76,8 +85,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -149,6 +157,11 @@ const docTemplate = `{
         },
         "/user/orders": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -164,8 +177,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -190,6 +202,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -211,8 +228,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -284,6 +300,11 @@ const docTemplate = `{
         },
         "/user/withdrawals": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -296,8 +317,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -349,6 +369,17 @@ const docTemplate = `{
                 }
             }
         },
+        "storage.BalanceStruct": {
+            "type": "object",
+            "properties": {
+                "current": {
+                    "type": "number"
+                },
+                "withdrawn": {
+                    "type": "number"
+                }
+            }
+        },
         "storage.Orders": {
             "type": "object",
             "properties": {
@@ -379,6 +410,13 @@ const docTemplate = `{
                     "type": "number"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

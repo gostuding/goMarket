@@ -156,7 +156,8 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 // @Summary Добавление номера заказа пользователя
 // @Accept json
 // @Param order body string true "Номер заказа"
-// @Param Authorization header string true "Токен авторизации"
+// @Security ApiKeyAuth
+// @Param Authorization header string false "Токен авторизации"
 // @Router /user/orders [post]
 // @Success 200 "Заказ уже был добавлен пользователем ранее"
 // @Success 202 "Заказ успешно зарегистрирован за пользователем"
@@ -209,7 +210,8 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 // @Accept json
 // @Produce json
 // @Router /user/orders [get]
-// @Param Authorization header string true "Токен авторизации"
+// @Security ApiKeyAuth
+// @Param Authorization header string false "Токен авторизации"
 // @Success 200 {array} storage.Orders "Список зарегистрированных за пользователем заказов"
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
@@ -222,9 +224,10 @@ func OrdersList(args RequestResponce) {
 // @Tags Баланс пользователя
 // @Summary Запрос баланса пользователя
 // @Produce json
-// @Param Authorization header string true "Токен авторизации"
+// @Security ApiKeyAuth
+// @Param Authorization header string false "Токен авторизации"
 // @Router /user/balance [get]
-// @Success 200 {string} storage.balanceStruct "Баланс пользователя"
+// @Success 200 {object} storage.BalanceStruct "Баланс пользователя"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса"
 func UserBalance(args RequestResponce) {
@@ -253,7 +256,8 @@ func UserBalance(args RequestResponce) {
 // @Summary Запрос на списание баллов в счёт другого заказа
 // @Accept json
 // @Param withdraw body Withdraw true "Номер заказа в счет которого списываются баллы"
-// @Param Authorization header string true "Токен авторизации"
+// @Security ApiKeyAuth
+// @Param Authorization header string false "Токен авторизации"
 // @Router /user/balance/withdraw [post]
 // @Success 200 "Списание успешно добавлено"
 // @failure 400 "Ошибка в теле запроса. Тело запроса не соответствует формату json"
@@ -302,7 +306,8 @@ func AddWithdraw(args RequestResponce) {
 // @Summary Запрос списка списаний баллов
 // @Produce json
 // @Router /user/withdrawals [get]
-// @Param Authorization header string true "Токен авторизации"
+// @Security ApiKeyAuth
+// @Param Authorization header string false "Токен авторизации"
 // @Success 200 {array} storage.Withdraws "Список списаний"
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"

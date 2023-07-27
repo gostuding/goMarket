@@ -14,6 +14,11 @@
     "paths": {
         "/user/balance": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -26,15 +31,14 @@
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "Баланс пользователя",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/storage.BalanceStruct"
                         }
                     },
                     "401": {
@@ -48,6 +52,11 @@
         },
         "/user/balance/withdraw": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -69,8 +78,7 @@
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -142,6 +150,11 @@
         },
         "/user/orders": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -157,8 +170,7 @@
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -183,6 +195,11 @@
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -204,8 +221,7 @@
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -277,6 +293,11 @@
         },
         "/user/withdrawals": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -289,8 +310,7 @@
                         "type": "string",
                         "description": "Токен авторизации",
                         "name": "Authorization",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -342,6 +362,17 @@
                 }
             }
         },
+        "storage.BalanceStruct": {
+            "type": "object",
+            "properties": {
+                "current": {
+                    "type": "number"
+                },
+                "withdrawn": {
+                    "type": "number"
+                }
+            }
+        },
         "storage.Orders": {
             "type": "object",
             "properties": {
@@ -372,6 +403,13 @@
                     "type": "number"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }

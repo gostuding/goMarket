@@ -21,7 +21,7 @@ type psqlStorage struct {
 	con *gorm.DB
 }
 
-type balanceStruct struct {
+type BalanceStruct struct {
 	Current   float32 `json:"current"`
 	Withdrawn float32 `json:"withdrawn"`
 }
@@ -116,7 +116,7 @@ func (s *psqlStorage) GetUserBalance(ctx context.Context, uid int) ([]byte, erro
 	if result.Error != nil {
 		return nil, fmt.Errorf("get user balance error: %w", result.Error)
 	}
-	data, err := json.Marshal(balanceStruct{Current: user.Balance, Withdrawn: user.Withdrawn})
+	data, err := json.Marshal(BalanceStruct{Current: user.Balance, Withdrawn: user.Withdrawn})
 	if err != nil {
 		return nil, fmt.Errorf("convert user balance to json error: %w", err)
 	}

@@ -17,6 +17,13 @@ definitions:
       sum:
         type: number
     type: object
+  storage.BalanceStruct:
+    properties:
+      current:
+        type: number
+      withdrawn:
+        type: number
+    type: object
   storage.Orders:
     properties:
       accrual:
@@ -52,7 +59,6 @@ paths:
       - description: Токен авторизации
         in: header
         name: Authorization
-        required: true
         type: string
       produces:
       - application/json
@@ -60,11 +66,13 @@ paths:
         "200":
           description: Баланс пользователя
           schema:
-            type: string
+            $ref: '#/definitions/storage.BalanceStruct'
         "401":
           description: Пользователь не авторизован
         "500":
           description: Внутренняя ошибка сервиса
+      security:
+      - ApiKeyAuth: []
       summary: Запрос баланса пользователя
       tags:
       - Баланс пользователя
@@ -82,7 +90,6 @@ paths:
       - description: Токен авторизации
         in: header
         name: Authorization
-        required: true
         type: string
       responses:
         "200":
@@ -100,6 +107,8 @@ paths:
           description: Номер заказа не прошёл проверку подлинности
         "500":
           description: Внутренняя ошибка сервиса
+      security:
+      - ApiKeyAuth: []
       summary: Запрос на списание баллов в счёт другого заказа
       tags:
       - Списание баллов
@@ -138,7 +147,6 @@ paths:
       - description: Токен авторизации
         in: header
         name: Authorization
-        required: true
         type: string
       produces:
       - application/json
@@ -155,6 +163,8 @@ paths:
           description: Пользователь не авторизован
         "500":
           description: Внутренняя ошибка сервиса
+      security:
+      - ApiKeyAuth: []
       summary: Запрос списка заказов, зарегистрированных за пользователем
       tags:
       - Заказы
@@ -171,7 +181,6 @@ paths:
       - description: Токен авторизации
         in: header
         name: Authorization
-        required: true
         type: string
       responses:
         "200":
@@ -188,6 +197,8 @@ paths:
           description: Номер заказа не прошёл проверку подлинности
         "500":
           description: Внутренняя ошибка сервиса
+      security:
+      - ApiKeyAuth: []
       summary: Добавление номера заказа пользователя
       tags:
       - Заказы
@@ -224,7 +235,6 @@ paths:
       - description: Токен авторизации
         in: header
         name: Authorization
-        required: true
         type: string
       produces:
       - application/json
@@ -241,7 +251,14 @@ paths:
           description: Пользователь не авторизован
         "500":
           description: Внутренняя ошибка сервиса
+      security:
+      - ApiKeyAuth: []
       summary: Запрос списка списаний баллов
       tags:
       - Списание баллов
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

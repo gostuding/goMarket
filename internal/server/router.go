@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"github.com/gostuding/goMarket/docs"
 	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"go.uber.org/zap"
 
@@ -38,7 +39,7 @@ type ordersStatus struct {
 	Accrual float32 `json:"accrual"`
 }
 
-func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTime int) http.Handler {
+func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTime int, address string) http.Handler {
 	exceptURLs := make([]string, 0)
 	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
@@ -47,9 +48,11 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 
 	router := chi.NewRouter()
 
+	docs.SwaggerInfo.Host = address
+
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{"https://*", "http://*"},
-		AllowedMethods: []string{"HEAD", "GET", "POST", "OPTIONS"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
 	}))
 
 	router.Use(middleware.RealIP, middlewares.AuthMiddleware(logger, exceptURLs, loginURL, key),
@@ -121,7 +124,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	})
 
 	router.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+		httpSwagger.URL(fmt.Sprintf("http://%s/swagger/doc.json", address)),
 	))
 
 	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +147,7 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 		return fmt.Errorf("server options error")
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
-	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime)
+	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime, cfg.ServerAddress)
 	go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
 	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
 }
