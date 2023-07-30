@@ -23,14 +23,14 @@ func main() {
 	cfg := server.NewConfig()
 	logger, err := logger.NewLogger()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Init logger error: %v", err)
 	}
 	strg, err := storage.NewPSQLStorage(cfg.DBConnect)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Create storage error: %v", err)
 	}
 	err = server.RunServer(cfg, strg, logger)
 	if err != nil {
-		logger.Fatalln(err)
+		logger.Fatalf("Run server error: %v", err)
 	}
 }

@@ -16,4 +16,6 @@ const (
 	gormError                = "gorm error: %w"
 	tokenGenerateError       = "token generation error: %w"
 	readRequestErrorString   = "read request body error: %w"
+	manyRequestsWaitTimeDef  = 60
+	shutdownTimeout          = 10
 )

@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -145,25 +148,69 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime, cfg.ServerAddress)
-	go timeRequest(fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
-	return http.ListenAndServe(cfg.ServerAddress, handler) //nolint:wrapcheck // <- senselessly
+	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancelFunc()
+
+	serverFinishError := make(chan error, 1)
+	srv := http.Server{Addr: cfg.ServerAddress, Handler: handler}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go timeRequest(ctx, &wg, fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
+	wg.Add(1)
+	go func() {
+		err := srv.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			serverFinishError <- nil
+		} else {
+			serverFinishError <- err
+			logger.Warnf("server lister error: %w", err)
+		}
+		logger.Debugln("Server listen finished")
+		wg.Done()
+	}()
+
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		shtCtx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(shutdownTimeout)*time.Second)
+		defer cancelFunc()
+		if err := srv.Shutdown(shtCtx); err != nil {
+			logger.Warnln("shutdown server erorr: ", err)
+		}
+	}(ctx)
+
+	wg.Wait()
+	return <-serverFinishError
 }
 
-func timeRequest(url string, logger *zap.SugaredLogger, strg CheckOrdersStorage) {
+func timeRequest(ctxStop context.Context, wg *sync.WaitGroup, url string,
+	logger *zap.SugaredLogger, strg CheckOrdersStorage) {
 	updateTicker := time.NewTicker(time.Second)
 	defer updateTicker.Stop()
+	sleepTime := time.Now()
 	for {
-		<-updateTicker.C
-		for _, order := range strg.GetAccrualOrders() {
-			logger.Debugln("order accrual request", order)
-			secs, err := accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
-			if err != nil {
-				logger.Warnln("accural request error", err)
+		select {
+		case <-updateTicker.C:
+			if !time.Now().After(sleepTime) {
+				break
 			}
-			if secs > 0 {
-				logger.Debugln("wait accural system", secs, "seconds")
-				time.Sleep(time.Duration(secs) * time.Second)
+			for _, order := range strg.GetAccrualOrders() {
+				secs, err := accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
+				if err != nil {
+					if errors.Is(err, syscall.ECONNREFUSED) {
+						logger.Debugln("accureal system connection refised")
+						break
+					}
+					logger.Warnln("accural request error", err)
+				}
+				if secs > 0 {
+					logger.Debugln("wait accural system", secs, "seconds")
+					sleepTime = time.Now().Add(time.Duration(time.Duration(secs).Seconds()))
+				}
 			}
+		case <-ctxStop.Done():
+			logger.Debugln("Accrual gorutine finished")
+			wg.Done()
+			return
 		}
 	}
 }
@@ -176,14 +223,13 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("request error: %w", err)
+		return 0, fmt.Errorf("do request error: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // <- senselessly
 	if resp.StatusCode == http.StatusTooManyRequests {
 		wait, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 		if err != nil {
-			wait = 60 //nolit:gomnd // <- default value
-			return wait, fmt.Errorf("too many requests. Default wait time. error: %w", err)
+			return manyRequestsWaitTimeDef, fmt.Errorf("too many requests. Default wait time. error: %w", err)
 		}
 		return wait, errors.New("too many  requests")
 	}
@@ -199,5 +245,9 @@ func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("json conver error: %w", err)
 	}
-	return 0, strg.SetOrderData(item.Order, item.Status, item.Accrual) //nolint:wrapcheck // <- wrapped early
+	err = strg.SetOrderData(item.Order, item.Status, item.Accrual)
+	if err != nil {
+		return 0, fmt.Errorf("set order data error: %w", err)
+	}
+	return 0, nil
 }
