@@ -1,0 +1,19 @@
+[
+    {
+        "FromLinter": "typecheck",
+        "Text": ": # github.com/gostuding/goMarket/internal/server [github.com/gostuding/goMarket/internal/server.test]\ninternal/server/router_test.go:76:16: accrualRequest(tt.args.url, tt.args.strg) (no value) used as value\ninternal/server/router_test.go:76:44: not enough arguments in call to accrualRequest\n\thave (string, CheckOrdersStorage)\n\twant (string, CheckOrdersStorage, chan int, chan error)",
+        "Severity": "error",
+        "SourceLines": [
+            "package server"
+        ],
+        "Replacement": null,
+        "Pos": {
+            "Filename": "internal/server/constans.go",
+            "Offset": 0,
+            "Line": 1,
+            "Column": 0
+        },
+        "ExpectNoLint": false,
+        "ExpectedNoLintLinter": ""
+    }
+]

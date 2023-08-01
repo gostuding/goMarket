@@ -25,9 +25,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Init logger error: %v", err)
 	}
-	strg, err := storage.NewPSQLStorage(cfg.DBConnect)
+	strg, err := storage.NewPSQLStorage(cfg.DBConnect, cfg.DBConnectionPull)
 	if err != nil {
-		log.Fatalf("Create storage error: %v", err)
+		logger.Fatalf("Create storage error: %v", err)
 	}
 	err = server.RunServer(cfg, strg, logger)
 	if err != nil {

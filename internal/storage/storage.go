@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +14,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	"gorm.io/gorm/logger"
 )
 
 type psqlStorage struct {
@@ -26,17 +25,22 @@ type BalanceStruct struct {
 	Withdrawn float32 `json:"withdrawn"`
 }
 
-func NewPSQLStorage(connectionString string) (*psqlStorage, error) {
-	db, err := gorm.Open(postgres.Open(connectionString), &gorm.Config{
-		Logger: logger.Discard,
-	})
+func NewPSQLStorage(connectionString string, pullCount int) (*psqlStorage, error) {
+	db, err := sql.Open("pgx", connectionString)
 	if err != nil {
-		return nil, fmt.Errorf("database connection create error: %w", err)
+		return nil, fmt.Errorf("pqx database connection error: %w", err)
+	}
+	db.SetMaxOpenConns(pullCount)
+	con, err := gorm.Open(
+		postgres.New(postgres.Config{Conn: db}),
+		&gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("gorm open connection error: %w", err)
 	}
 	storage := psqlStorage{
-		con: db,
+		con: con,
 	}
-	return &storage, structCheck(db)
+	return &storage, structCheck(con)
 }
 
 func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip string) (int, error) {
@@ -197,6 +201,18 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	})
 	if err != nil {
 		return fmt.Errorf("update order status transaction error: %w", err)
+	}
+	return nil
+}
+
+func (s *psqlStorage) Close() error {
+	db, err := s.con.DB()
+	if err != nil {
+		return fmt.Errorf("get db from gorm error: %w", err)
+	}
+	err = db.Close()
+	if err != nil {
+		return fmt.Errorf("close db connection error: %w", err)
 	}
 	return nil
 }

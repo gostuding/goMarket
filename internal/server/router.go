@@ -42,18 +42,18 @@ type ordersStatus struct {
 	Accrual float32 `json:"accrual"`
 }
 
-func LoginOrRegister(w http.ResponseWriter, r *http.Request, logger *zap.SugaredLogger, key []byte,
+func loginRegistrationCommon(w http.ResponseWriter, r *http.Request, logger *zap.SugaredLogger, key []byte,
 	strg Storage, tlt int,
-	function func(context.Context, []byte, []byte, string, string, Storage, int) (string, int, error)) {
+	mainFunc func(context.Context, []byte, []byte, string, string, Storage, int) (string, int, error)) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		logger.Warnln(readRequestErrorString, err)
+		logger.Warnf(readRequestErrorString, err)
 		return
 	}
-	token, status, err := function(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tlt)
+	token, status, err := mainFunc(r.Context(), body, key, r.RemoteAddr, r.UserAgent(), strg, tlt)
 	if err != nil {
-		logger.Warnln("error", err)
+		logger.Warnf("storage error: %w", err)
 	}
 	w.Header().Set(authHeader, token)
 	w.WriteHeader(status)
@@ -67,7 +67,6 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", iconPath)
 
 	router := chi.NewRouter()
-
 	docs.SwaggerInfo.Host = address
 
 	router.Use(cors.Handler(cors.Options{
@@ -79,11 +78,11 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		middlewares.GzipMiddleware(logger), middleware.Recoverer)
 
 	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
-		LoginOrRegister(w, r, logger, key, strg, tokenLiveTime, Register)
+		loginRegistrationCommon(w, r, logger, key, strg, tokenLiveTime, Register)
 	})
 
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
-		LoginOrRegister(w, r, logger, key, strg, tokenLiveTime, LoginFunc)
+		loginRegistrationCommon(w, r, logger, key, strg, tokenLiveTime, LoginFunc)
 	})
 
 	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +143,7 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 
 func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 	if cfg == nil {
-		return fmt.Errorf("server options error")
+		return errors.New("server options is nil")
 	}
 	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime, cfg.ServerAddress)
@@ -153,10 +152,8 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 
 	serverFinishError := make(chan error, 1)
 	srv := http.Server{Addr: cfg.ServerAddress, Handler: handler}
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go timeRequest(ctx, &wg, fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger, strg)
-	wg.Add(1)
+	go timeRequest(ctx, fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger,
+		strg, cfg.AccrualRequestInterval)
 	go func() {
 		err := srv.ListenAndServe()
 		if errors.Is(err, http.ErrServerClosed) {
@@ -166,27 +163,51 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 			logger.Warnf("server lister error: %w", err)
 		}
 		logger.Debugln("Server listen finished")
-		wg.Done()
+		if err := strg.Close(); err != nil {
+			logger.Warnf("close storage connection error: %w", err)
+		}
+		close(serverFinishError)
 	}()
 
-	go func(ctx context.Context) {
+	go func() {
 		<-ctx.Done()
 		shtCtx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(shutdownTimeout)*time.Second)
 		defer cancelFunc()
 		if err := srv.Shutdown(shtCtx); err != nil {
-			logger.Warnln("shutdown server erorr: ", err)
+			logger.Warnf("shutdown server erorr: %w", err)
 		}
-	}(ctx)
+	}()
 
-	wg.Wait()
 	return <-serverFinishError
 }
 
-func timeRequest(ctxStop context.Context, wg *sync.WaitGroup, url string,
-	logger *zap.SugaredLogger, strg CheckOrdersStorage) {
-	updateTicker := time.NewTicker(time.Second)
+func timeRequest(ctxStop context.Context, url string,
+	logger *zap.SugaredLogger, strg CheckOrdersStorage, interval int) {
+	updateTicker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer updateTicker.Stop()
 	sleepTime := time.Now()
+	sleepChan := make(chan int, 1)
+	errorChan := make(chan error, 1)
+
+	go func() {
+		for {
+			select {
+			case secs := <-sleepChan:
+				logger.Debugf("wait accural system %d seconds", secs)
+				sleepTime = time.Now().Add(time.Duration(time.Duration(secs).Seconds()))
+			case err := <-errorChan:
+				if errors.Is(err, syscall.ECONNREFUSED) {
+					logger.Debugln("accureal system connection refised")
+				} else {
+					logger.Warnf("accural request error: %w", err)
+				}
+			case <-ctxStop.Done():
+				return
+			}
+		}
+	}()
+
+	wg := sync.WaitGroup{}
 	for {
 		select {
 		case <-updateTicker.C:
@@ -194,60 +215,61 @@ func timeRequest(ctxStop context.Context, wg *sync.WaitGroup, url string,
 				break
 			}
 			for _, order := range strg.GetAccrualOrders() {
-				secs, err := accrualRequest(fmt.Sprintf("%s/%s", url, order), strg)
-				if err != nil {
-					if errors.Is(err, syscall.ECONNREFUSED) {
-						logger.Debugln("accureal system connection refised")
-						break
-					}
-					logger.Warnln("accural request error", err)
-				}
-				if secs > 0 {
-					logger.Debugln("wait accural system", secs, "seconds")
-					sleepTime = time.Now().Add(time.Duration(time.Duration(secs).Seconds()))
-				}
+				wg.Add(1)
+				go accrualRequest(fmt.Sprintf("%s/%s", url, order), strg, sleepChan, errorChan, &wg)
 			}
+			wg.Wait()
 		case <-ctxStop.Done():
+			close(sleepChan)
+			close(errorChan)
 			logger.Debugln("Accrual gorutine finished")
-			wg.Done()
 			return
 		}
 	}
 }
 
-func accrualRequest(url string, strg CheckOrdersStorage) (int, error) {
+func accrualRequest(url string, strg CheckOrdersStorage, sleepChan chan int,
+	errorChan chan error, wg *sync.WaitGroup) {
+	defer wg.Done()
 	client := http.Client{}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("create request error: %w", err)
+		errorChan <- fmt.Errorf("create request error: %w", err)
+		return
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("do request error: %w", err)
+		errorChan <- fmt.Errorf("do request error: %w", err)
+		return
 	}
 	defer resp.Body.Close() //nolint:errcheck // <- senselessly
 	if resp.StatusCode == http.StatusTooManyRequests {
 		wait, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 		if err != nil {
-			return manyRequestsWaitTimeDef, fmt.Errorf("too many requests. Default wait time. error: %w", err)
+			sleepChan <- manyRequestsWaitTimeDef
+			errorChan <- fmt.Errorf("too many requests. Default wait time. error: %w", err)
+			return
 		}
-		return wait, errors.New("too many  requests")
+		sleepChan <- wait
+		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("responce (%s) status code incorrect: %d", url, resp.StatusCode)
+		errorChan <- fmt.Errorf("responce (%s) status code incorrect: %d", url, resp.StatusCode)
+		return
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("responce body read error: %w", err)
+		errorChan <- fmt.Errorf("responce body read error: %w", err)
+		return
 	}
 	var item ordersStatus
 	err = json.Unmarshal(data, &item)
 	if err != nil {
-		return 0, fmt.Errorf("json conver error: %w", err)
+		errorChan <- fmt.Errorf("json conver error: %w", err)
+		return
 	}
 	err = strg.SetOrderData(item.Order, item.Status, item.Accrual)
 	if err != nil {
-		return 0, fmt.Errorf("set order data error: %w", err)
+		errorChan <- fmt.Errorf("set order data error: %w", err)
 	}
-	return 0, nil
 }

@@ -23,8 +23,5 @@ vendor/
 .vscode
 
 
-.golangci.yml
-golint_run.sh
 test.py
-golangci-lint
 

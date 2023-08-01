@@ -25,6 +25,7 @@ type Storage interface {
 	GetUserBalance(context.Context, int) ([]byte, error)
 	AddWithdraw(context.Context, int, string, float32) (int, error)
 	GetWithdraws(context.Context, int) ([]byte, error)
+	Close() error
 }
 
 type LoginPassword struct {

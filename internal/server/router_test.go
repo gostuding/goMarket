@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -29,7 +30,7 @@ func Test_accrualRequest(t *testing.T) {
 	}))
 	defer server.Close()
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockStorage(ctrl)
+	m := mocks.NewMockCheckOrdersStorage(ctrl)
 	m.EXPECT().SetOrderData("2", "NEW", float32(0)).Return(nil)
 
 	type args struct {
@@ -73,11 +74,18 @@ func Test_accrualRequest(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := accrualRequest(tt.args.url, tt.args.strg)
-			if err != nil && !tt.wantErr {
+			sleepChan := make(chan int, 1)
+			errorChan := make(chan error, 1)
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go accrualRequest(tt.args.url, tt.args.strg, sleepChan, errorChan, &wg)
+			wg.Wait()
+			close(sleepChan)
+			close(errorChan)
+			if err := <-errorChan; err != nil && !tt.wantErr {
 				t.Errorf("accrualRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if got != tt.want {
+			if got := <-sleepChan; got != tt.want {
 				t.Errorf("accrualRequest() = %v, want %v", got, tt.want)
 			}
 		})

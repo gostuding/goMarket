@@ -28,7 +28,7 @@ type authJWTStruct struct {
 func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, authJWTStruct{
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(liveTime) * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(liveTime) * time.Second)),
 		},
 		UserAgent: ua,
 		Login:     login,
