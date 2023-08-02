@@ -70,6 +70,15 @@ func Test_accrualRequest(t *testing.T) {
 			want:    0,
 			wantErr: true,
 		},
+		{
+			name: "Ошибка в запросе на сервер",
+			args: args{
+				url:  fmt.Sprintf("%s/?=", server.URL),
+				strg: m,
+			},
+			want:    0,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		tt := tt

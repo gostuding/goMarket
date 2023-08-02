@@ -44,7 +44,7 @@ func NewPSQLStorage(connectionString string, pullCount int) (*psqlStorage, error
 }
 
 func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip string) (int, error) {
-	user := Users{Login: login, Pwd: getMD5Hash(pwd), UserAgent: ua, IP: ip}
+	user := Users{Login: login, Pwd: pwd, UserAgent: ua, IP: ip}
 	result := s.con.WithContext(ctx).Create(&user)
 	if result.Error != nil {
 		return 0, fmt.Errorf("sql error: %w", result.Error)
@@ -54,7 +54,7 @@ func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip strin
 
 func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int, error) {
 	var user Users
-	result := s.con.WithContext(ctx).Where("login = ? AND pwd = ?", login, getMD5Hash(pwd)).First(&user)
+	result := s.con.WithContext(ctx).Where("login = ? AND pwd = ?", login, pwd).First(&user)
 	if result.Error != nil {
 		return 0, fmt.Errorf("user error: %w", result.Error)
 	}
@@ -67,31 +67,38 @@ func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int
 	return int(user.ID), nil
 }
 
-func (s *psqlStorage) isOrderExist(ctx context.Context, order string) (*Orders, error) {
-	var item Orders
-	result := s.con.WithContext(ctx).Where("number = ? ", order).First(&item)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &item, nil
-}
-
 func (s *psqlStorage) AddOrder(ctx context.Context, uid int, order string) (int, error) {
-	item, err := s.isOrderExist(ctx, order)
-	if item != nil {
-		if item.UID == uid {
-			return http.StatusOK, nil
-		}
-		return http.StatusConflict, nil
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "NEW"})
+	var item Orders
+	orderOk := errors.New("order ok")
+	orderConflict := errors.New("order conflict")
+	err := s.con.Transaction(func(tx *gorm.DB) error {
+		result := s.con.WithContext(ctx).Where("number = ? ", order).First(&item)
 		if result.Error != nil {
-			return http.StatusInternalServerError, fmt.Errorf("create order error: %w", result.Error)
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "NEW"})
+				if result.Error != nil {
+					return fmt.Errorf("create order error: %w", result.Error)
+				}
+				return nil
+			}
+			return fmt.Errorf("select order error: %w", result.Error)
+		} else {
+			if item.UID == uid {
+				return orderOk
+			}
+			return orderConflict
 		}
+	})
+	switch err { //nolint:errorlint //<- wrapped errors is on default
+	case orderConflict:
+		return http.StatusConflict, nil
+	case orderOk:
+		return http.StatusOK, nil
+	case nil:
 		return http.StatusAccepted, nil
+	default:
+		return http.StatusInternalServerError, err //nolint:wrapcheck // <-wrapped early
 	}
-	return http.StatusInternalServerError, fmt.Errorf("select order error: %w", err)
 }
 
 func (s *psqlStorage) getValues(ctx context.Context, uid int, values any) ([]byte, error) {
@@ -129,17 +136,19 @@ func (s *psqlStorage) GetUserBalance(ctx context.Context, uid int) ([]byte, erro
 
 func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, sum float32) (int, error) {
 	var user Users
-	result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
-	if result.Error != nil {
-		return http.StatusInternalServerError, fmt.Errorf("get user error: %w", result.Error)
-	}
-	if user.Balance < sum {
-		return http.StatusPaymentRequired, nil
-	}
-	user.Balance -= sum
-	user.Withdrawn += sum
+	userNorFound := errors.New("user not found in database")
+	lowUserBalance := errors.New("low balance level")
 	withdraw := Withdraws{Sum: sum, UID: int(user.ID), Number: order}
 	err := s.con.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
+		if result.Error != nil {
+			return fmt.Errorf("get user error: %w, %w", userNorFound, result.Error)
+		}
+		if user.Balance < sum {
+			return lowUserBalance
+		}
+		user.Balance -= sum
+		user.Withdrawn += sum
 		if err := tx.Save(&user).Error; err != nil {
 			return fmt.Errorf("update user balance error: %w", err)
 		}
@@ -149,6 +158,12 @@ func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, su
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, userNorFound) {
+			return http.StatusInternalServerError, err //nolint:wrapcheck //<-wrapped early
+		}
+		if errors.Is(err, lowUserBalance) {
+			return http.StatusPaymentRequired, nil
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return http.StatusConflict, errors.New("order number repeat error")
@@ -179,18 +194,18 @@ func (s *psqlStorage) GetAccrualOrders() []string {
 func (s *psqlStorage) SetOrderData(number string, status string, balance float32) error {
 	var order Orders
 	var user Users
-	result := s.con.Where("number = ?", number).First(&order)
-	if result.Error != nil {
-		return fmt.Errorf("update order status, get order (%s) error: %w", number, result.Error)
-	}
-	result = s.con.Where("id = ?", order.UID).First(&user)
-	if result.Error != nil {
-		return fmt.Errorf("update order status, get user (%d) error: %w", order.UID, result.Error)
-	}
-	user.Balance += balance
-	order.Status = status
-	order.Accrual = balance
 	err := s.con.Transaction(func(tx *gorm.DB) error {
+		result := s.con.Where("number = ?", number).First(&order)
+		if result.Error != nil {
+			return fmt.Errorf("update order status, get order (%s) error: %w", number, result.Error)
+		}
+		result = s.con.Where("id = ?", order.UID).First(&user)
+		if result.Error != nil {
+			return fmt.Errorf("update order status, get user (%d) error: %w", order.UID, result.Error)
+		}
+		user.Balance += balance
+		order.Status = status
+		order.Accrual = balance
 		if err := tx.Save(&user).Error; err != nil {
 			return fmt.Errorf("user balance update error: %w", err)
 		}
@@ -215,4 +230,12 @@ func (s *psqlStorage) Close() error {
 		return fmt.Errorf("close db connection error: %w", err)
 	}
 	return nil
+}
+
+func (s *psqlStorage) IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		return true
+	}
+	return false
 }

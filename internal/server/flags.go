@@ -5,12 +5,6 @@ import (
 	"os"
 )
 
-const (
-	defaultDBPullCount            = 100
-	defaultAuthTokenLiveTime      = 3600
-	defaultAccrualRequestInterval = 1
-)
-
 type Config struct {
 	ServerAddress          string
 	DBConnect              string
@@ -22,8 +16,9 @@ type Config struct {
 }
 
 func envValue(value string, name string) string {
-	if osValue := os.Getenv(name); osValue != "" {
-		return osValue
+	env, ok := os.LookupEnv(name)
+	if ok {
+		return env
 	}
 	return value
 }
@@ -50,7 +45,8 @@ func NewConfig() *Config {
 	flag.StringVar(&key, "k", key, "ключ для формарования токена авторизации")
 	flag.IntVar(&cfg.AuthTokenLiveTime, "t", cfg.AuthTokenLiveTime, "время жизни токена авторизации (секунды)")
 	flag.IntVar(&cfg.DBConnectionPull, "pc", cfg.DBConnectionPull, "количество открытых соединений с БД")
-	flag.IntVar(&cfg.AccrualRequestInterval, "ri", cfg.AccrualRequestInterval, "интервал запросов к системе расчета начислений (секунды)")
+	flag.IntVar(&cfg.AccrualRequestInterval, "ri", cfg.AccrualRequestInterval,
+		"интервал запросов к системе расчета начислений (секунды)")
 	flag.Parse()
 	return &cfg
 }

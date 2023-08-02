@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,8 +13,6 @@ import (
 	"strconv"
 
 	"github.com/gostuding/goMarket/internal/server/middlewares"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +26,7 @@ type Storage interface {
 	AddWithdraw(context.Context, int, string, float32) (int, error)
 	GetWithdraws(context.Context, int) ([]byte, error)
 	Close() error
+	IsUniqueViolation(error) bool
 }
 
 type LoginPassword struct {
@@ -95,25 +96,24 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	if err != nil {
 		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
-	uid, err := strg.Registration(ctx, user.Login, user.Password, ua, ip)
+	uid, err := strg.Registration(ctx, user.Login, hashPassword(user.Login, user.Password), ua, ip)
 	if err != nil {
-		var pgErr *pgconn.PgError
 		status := http.StatusInternalServerError
 		err = fmt.Errorf(gormError, err)
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		if strg.IsUniqueViolation(err) {
 			status = http.StatusConflict
 			err = fmt.Errorf("user registrating duplicate error: '%s'", user.Login)
 		}
 		return "", status, err
 	}
-	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, user.Login, ip)
+	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, ip)
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf(tokenGenerateError, err)
 	}
 	return token, http.StatusOK, nil
 }
 
-// LoginFunc ...
+// Login ...
 // @Tags Авторизация
 // @Summary Авторизация пользователя в микросервисе
 // @Accept json
@@ -124,7 +124,7 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 // @failure 400 "Ошибка в теле запроса. Тело запроса не соответствует json формату"
 // @failure 401 "Логин или пароль не найден"
 // @failure 500 "Внутренняя ошибка сервиса".
-func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
+func Login(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	strg Storage, tokenLiveTime int) (string, int, error) {
 	user, err := isValidateLoginPassword(body)
 	if err != nil {
@@ -134,7 +134,7 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	if err != nil {
 		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
-	uid, err := strg.Login(ctx, user.Login, user.Password, ua, ip)
+	uid, err := strg.Login(ctx, user.Login, hashPassword(user.Login, user.Password), ua, ip)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", http.StatusUnauthorized, fmt.Errorf("user not found in system. Login: '%s'", user.Login)
@@ -142,14 +142,30 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 			return "", http.StatusInternalServerError, fmt.Errorf(gormError, err)
 		}
 	}
-	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, user.Login, ip)
+	token, err := middlewares.CreateToken(key, tokenLiveTime, uid, ua, ip)
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf(tokenGenerateError, err)
 	}
 	return token, http.StatusOK, nil
 }
 
-// OrdersAddFunc ...
+func solFromBytes(text []byte) int64 {
+	var summ int64 = 0
+	for rune := range text {
+		summ += int64(rune)
+	}
+	return summ
+}
+
+func hashPassword(login, pwd string) string {
+	loginSol := solFromBytes([]byte(login))
+	pwdSol := solFromBytes([]byte(pwd))
+	pwd = fmt.Sprintf("%d%s%d%s%d", loginSol, login, pwdSol, pwd, loginSol+pwdSol)
+	hash := md5.Sum([]byte(pwd))
+	return hex.EncodeToString(hash[:])
+}
+
+// AddOrder ...
 // @Tags Заказы
 // @Summary Добавление номера заказа пользователя
 // @Accept json
@@ -164,20 +180,40 @@ func LoginFunc(ctx context.Context, body, key []byte, remoteAddr, ua string,
 // @failure 409 "Заказ зарегистрирован за другим пользователем"
 // @failure 422 "Номер заказа не прошёл проверку подлинности"
 // @failure 500 "Внутренняя ошибка сервиса".
-func OrdersAddFunc(ctx context.Context, order string, strg Storage) (int, error) {
-	err := checkOrderNumber(order)
+func AddOrder(args RequestResponce) {
+	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
-		return http.StatusUnprocessableEntity, fmt.Errorf("check order error: %w", err)
+		args.w.WriteHeader(http.StatusInternalServerError)
+		args.logger.Warnf(readRequestErrorString, err)
+		return
 	}
-	uid, ok := ctx.Value(middlewares.AuthUID).(int)
+	defer args.r.Body.Close() //nolint:errcheck // <-senselessly
+	if len(body) == 0 {
+		args.w.WriteHeader(http.StatusBadRequest)
+		args.logger.Warnln("empty add order request's body")
+		return
+	}
+	err = checkOrderNumber(string(body))
+	if err != nil {
+		args.w.WriteHeader(http.StatusUnprocessableEntity)
+		args.logger.Warnf("check order error: %w", err)
+		return
+	}
+	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
 	if !ok {
-		return http.StatusUnauthorized, errors.New(uidContextTypeError)
+		args.w.WriteHeader(http.StatusUnauthorized)
+		args.logger.Warnln(uidContextTypeError)
+		return
 	}
-	return strg.AddOrder(ctx, uid, order) //nolint:wrapcheck // <- wrapped in storage
+	status, err := args.strg.AddOrder(args.r.Context(), uid, string(body))
+	if err != nil {
+		args.logger.Warnf("add order error: %w", err)
+	}
+	args.w.WriteHeader(status)
 }
 
 func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
-	args.logger.Debugln(name, "list request")
+	args.logger.Debugf("%s list request", name)
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
 	if !ok {
@@ -188,7 +224,7 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 	data, err := f(args.r.Context(), uid)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnln(name, "get list error", err)
+		args.logger.Warnf("%s get list error: %w", name, err)
 		return
 	}
 	if data == nil {
@@ -198,11 +234,11 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 	}
 	_, err = args.w.Write(data)
 	if err != nil {
-		args.logger.Warnln(writeResponceErrorString, err)
+		args.logger.Warnf(writeResponceErrorString, err)
 	}
 }
 
-// OrdersList ...
+// GetOrdersList ...
 // @Tags Заказы
 // @Summary Запрос списка заказов, зарегистрированных за пользователем
 // @Accept json
@@ -214,11 +250,11 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func OrdersList(args RequestResponce) {
+func GetOrdersList(args RequestResponce) {
 	getListCommon(&args, "orders", args.strg.GetOrders)
 }
 
-// UserBalance ...
+// GetUserBalance ...
 // @Tags Баланс пользователя
 // @Summary Запрос баланса пользователя
 // @Produce json
@@ -228,7 +264,7 @@ func OrdersList(args RequestResponce) {
 // @Success 200 {object} storage.BalanceStruct "Баланс пользователя"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func UserBalance(args RequestResponce) {
+func GetUserBalance(args RequestResponce) {
 	args.logger.Debug("user balance request")
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
 	if !ok {
@@ -268,21 +304,21 @@ func AddWithdraw(args RequestResponce) {
 	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnln(bodyReadError, err)
+		args.logger.Warnf("body read error: %w", err)
 		return
 	}
 	var withdraw Withdraw
 	err = json.Unmarshal(body, &withdraw)
 	if err != nil {
 		args.w.WriteHeader(http.StatusBadRequest)
-		args.logger.Warnln(jsonConvertEerrorString, err)
+		args.logger.Warnf("convert to json error: %w", err)
 		return
 	}
-	args.logger.Debugln("add withdraw request", withdraw.Order, withdraw.Sum)
+	args.logger.Debugf("add withdraw request %s: %f", withdraw.Order, withdraw.Sum)
 	err = checkOrderNumber(withdraw.Order)
 	if err != nil {
 		args.w.WriteHeader(http.StatusUnprocessableEntity)
-		args.logger.Warnln(checkOrderErrorString, err)
+		args.logger.Warnf("check order error", err)
 		return
 	}
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
@@ -299,7 +335,7 @@ func AddWithdraw(args RequestResponce) {
 	args.w.WriteHeader(status)
 }
 
-// WithdrawsList ...
+// GetWithdrawsList ...
 // @Tags Списание баллов
 // @Summary Запрос списка списаний баллов
 // @Produce json
@@ -310,6 +346,6 @@ func AddWithdraw(args RequestResponce) {
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func WithdrawsList(args RequestResponce) {
+func GetWithdrawsList(args RequestResponce) {
 	getListCommon(&args, "withdraws", args.strg.GetWithdraws)
 }

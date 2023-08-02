@@ -137,6 +137,20 @@ func (mr *MockStorageMockRecorder) GetWithdraws(arg0, arg1 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWithdraws", reflect.TypeOf((*MockStorage)(nil).GetWithdraws), arg0, arg1)
 }
 
+// IsUniqueViolation mocks base method.
+func (m *MockStorage) IsUniqueViolation(arg0 error) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsUniqueViolation", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsUniqueViolation indicates an expected call of IsUniqueViolation.
+func (mr *MockStorageMockRecorder) IsUniqueViolation(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsUniqueViolation", reflect.TypeOf((*MockStorage)(nil).IsUniqueViolation), arg0)
+}
+
 // Login mocks base method.
 func (m *MockStorage) Login(arg0 context.Context, arg1, arg2, arg3, arg4 string) (int, error) {
 	m.ctrl.T.Helper()

@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 )
 
-type uidstr string
+type uidstr int
 
-const AuthUID uidstr = "uid"
+const (
+	AuthUID uidstr = iota
+)
 
 type authJWTStruct struct {
 	jwt.RegisteredClaims
@@ -25,13 +26,12 @@ type authJWTStruct struct {
 	UID       int
 }
 
-func CreateToken(key []byte, liveTime, uid int, ua, login, ip string) (string, error) {
+func CreateToken(key []byte, liveTime, uid int, ua, ip string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, authJWTStruct{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(liveTime) * time.Second)),
 		},
 		UserAgent: ua,
-		Login:     login,
 		IP:        ip,
 		UID:       uid,
 	})
@@ -65,21 +65,14 @@ func checkAuthToken(r *http.Request, key []byte) (int, error) {
 		return 0, fmt.Errorf("user ip not equal to IP:port, error: %w", err)
 	}
 	if claims.UserAgent != r.UserAgent() || claims.IP != ip {
-		return 0, errors.New("user data changed. Reauth requaged")
+		return 0, errors.New("user data changed. Reauth requared")
 	}
 	return claims.UID, nil
 }
 
-func AuthMiddleware(logger *zap.SugaredLogger, except []string,
-	redirectURL string, key []byte) func(h http.Handler) http.Handler {
+func AuthMiddleware(logger *zap.SugaredLogger, redirectURL string, key []byte) func(h http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
-			for _, item := range except {
-				if strings.Contains(r.URL.Path, item) {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
 			uid, err := checkAuthToken(r, key)
 			if err != nil {
 				http.Redirect(w, r, redirectURL, http.StatusUnauthorized)
@@ -87,7 +80,7 @@ func AuthMiddleware(logger *zap.SugaredLogger, except []string,
 				return
 			}
 			w.Header().Set(authString, r.Header.Get(authString))
-			next.ServeHTTP(w, r.Clone(context.WithValue(r.Context(), AuthUID, uid)))
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), AuthUID, uid)))
 		}
 		return http.HandlerFunc(fn)
 	}

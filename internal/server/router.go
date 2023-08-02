@@ -55,87 +55,70 @@ func loginRegistrationCommon(w http.ResponseWriter, r *http.Request, logger *zap
 	if err != nil {
 		logger.Warnf("storage error: %w", err)
 	}
-	w.Header().Set(authHeader, token)
+	w.Header().Set("Authorization", token)
 	w.WriteHeader(status)
 }
 
 func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTime int, address string) http.Handler {
-	exceptURLs := make([]string, 0)
-	var registerURL = "/api/user/register"
 	var loginURL = "/api/user/login"
-	var userOrders = "/api/user/orders"
-	exceptURLs = append(exceptURLs, registerURL, loginURL, "/swagger/", iconPath)
-
+	var ordersListURL = "/api/user/orders"
 	router := chi.NewRouter()
 	docs.SwaggerInfo.Host = address
+	router.Use(middleware.RealIP, middlewares.GzipMiddleware(logger), middleware.Recoverer,
+		cors.Handler(cors.Options{
+			AllowedOrigins: []string{"https://*", "http://*"},
+			AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		}),
+	)
 
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"https://*", "http://*"},
-		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
-	}))
-
-	router.Use(middleware.RealIP, middlewares.AuthMiddleware(logger, exceptURLs, loginURL, key),
-		middlewares.GzipMiddleware(logger), middleware.Recoverer)
-
-	router.Post(registerURL, func(w http.ResponseWriter, r *http.Request) {
+	router.Post("/api/user/register", func(w http.ResponseWriter, r *http.Request) {
 		loginRegistrationCommon(w, r, logger, key, strg, tokenLiveTime, Register)
 	})
 
 	router.Post(loginURL, func(w http.ResponseWriter, r *http.Request) {
-		loginRegistrationCommon(w, r, logger, key, strg, tokenLiveTime, LoginFunc)
-	})
-
-	router.Post(userOrders, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			logger.Warnln(readRequestErrorString, err)
-			return
-		}
-		if len(body) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			logger.Warnln("empty add order request's body")
-			return
-		}
-		status, err := OrdersAddFunc(r.Context(), string(body), strg)
-		if err != nil {
-			logger.Warnln("add order error", err)
-		}
-		w.WriteHeader(status)
-	})
-
-	router.Get(userOrders, func(w http.ResponseWriter, r *http.Request) {
-		OrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
-	})
-
-	router.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
-		UserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
-	})
-
-	router.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
-		AddWithdraw(RequestResponce{r: r, w: w, strg: strg, logger: logger})
-	})
-
-	router.Get("/api/user/withdrawals", func(w http.ResponseWriter, r *http.Request) {
-		WithdrawsList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		loginRegistrationCommon(w, r, logger, key, strg, tokenLiveTime, Login)
 	})
 
 	router.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL(fmt.Sprintf("http://%s/swagger/doc.json", address)),
 	))
 
-	router.Get(iconPath, func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := os.ReadFile("./static/icon.png")
 		if err != nil {
-			logger.Warnln("icon not found", err)
+			logger.Warnf("icon not found: %w", err)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, err = w.Write(fileBytes)
 		if err != nil {
-			logger.Warnln("write icon file error", err)
+			logger.Warnf("write icon file error: %w", err)
 		}
+	})
+
+	router.Group(func(r chi.Router) {
+		r.Use(middlewares.AuthMiddleware(logger, loginURL, key))
+
+		r.Get(ordersListURL, func(w http.ResponseWriter, r *http.Request) {
+			GetOrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		})
+
+		r.Post(ordersListURL, func(w http.ResponseWriter, r *http.Request) {
+			AddOrder(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		})
+
+		r.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
+			GetUserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		})
+
+		r.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
+			AddWithdraw(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		})
+
+		r.Get("/api/user/withdrawals", func(w http.ResponseWriter, r *http.Request) {
+			GetWithdrawsList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+		})
 	})
 
 	return router
@@ -152,8 +135,9 @@ func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
 
 	serverFinishError := make(chan error, 1)
 	srv := http.Server{Addr: cfg.ServerAddress, Handler: handler}
-	go timeRequest(ctx, fmt.Sprintf("%s/api/orders", cfg.AccuralAddress), logger,
-		strg, cfg.AccrualRequestInterval)
+	go timeRequest(ctx, fmt.Sprintf("%s/api/orders", cfg.AccuralAddress),
+		logger, strg, cfg.AccrualRequestInterval)
+
 	go func() {
 		err := srv.ListenAndServe()
 		if errors.Is(err, http.ErrServerClosed) {

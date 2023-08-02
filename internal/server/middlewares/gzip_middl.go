@@ -12,18 +12,17 @@ import (
 
 type gzipWriter struct {
 	http.ResponseWriter
-	logger    *zap.SugaredLogger
-	isWriting bool
+	logger     *zap.SugaredLogger
+	statusCode int
 }
 
 func newGzipWriter(r http.ResponseWriter, logger *zap.SugaredLogger) *gzipWriter {
-	return &gzipWriter{ResponseWriter: r, isWriting: false, logger: logger}
+	return &gzipWriter{ResponseWriter: r, logger: logger}
 }
 
 func (r *gzipWriter) Write(b []byte) (int, error) {
-	if !r.isWriting && r.Header().Get(ceString) == gzipString {
-		r.isWriting = true
-		compressor := gzip.NewWriter(r)
+	if r.Header().Get(ceString) == gzipString {
+		compressor := gzip.NewWriter(r.ResponseWriter)
 		size, err := compressor.Write(b)
 		if err != nil {
 			return 0, fmt.Errorf("compress respons body error: %w", err)
@@ -31,17 +30,18 @@ func (r *gzipWriter) Write(b []byte) (int, error) {
 		if err = compressor.Close(); err != nil {
 			return 0, fmt.Errorf("compress close error: %w", err)
 		}
-		r.isWriting = false
 		return size, nil
 	}
 	return r.ResponseWriter.Write(b) //nolint:wrapcheck // <- default action
 }
 
 func (r *gzipWriter) WriteHeader(statusCode int) {
-	contentType := r.Header().Get(ctString) == "application/json" || r.Header().Get(ctString) == "text/html"
+	contentType := strings.Contains(r.Header().Get(ctString), "application/json") ||
+		strings.Contains(r.Header().Get(ctString), "text/html")
 	if statusCode == 200 && contentType {
 		r.Header().Set(ceString, gzipString)
 	}
+	r.statusCode = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
@@ -79,7 +79,7 @@ func GzipMiddleware(logger *zap.SugaredLogger) func(h http.Handler) http.Handler
 			if strings.Contains(r.Header.Get(ceString), gzipString) {
 				cr, err := newGzipReader(r.Body)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
+					w.WriteHeader(http.StatusBadRequest)
 					logger.Warnf("gzip reader create error: %w", err)
 					return
 				}

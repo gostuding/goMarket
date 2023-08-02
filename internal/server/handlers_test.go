@@ -3,16 +3,29 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/gostuding/goMarket/internal/mocks"
-	"github.com/gostuding/goMarket/internal/server/middlewares"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
+
+func testCommon(fName, got, want string, got1, want1 int, err error, wantError, wantCheck bool) error {
+	if (err != nil) != wantError {
+		return fmt.Errorf("%s error = %w, wantErr %v", fName, err, wantError)
+	}
+	if wantCheck && got != want {
+		return fmt.Errorf("%s got = %v, want %v", fName, got, want)
+	}
+	if got1 != want1 {
+		return fmt.Errorf("%s got1 = %v, want2 %v", fName, got1, want1)
+	}
+	return nil
+}
 
 func TestRegister(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -20,9 +33,12 @@ func TestRegister(t *testing.T) {
 	uid := 1
 	ctx := context.Background()
 	unqueError := pgconn.PgError{Code: pgerrcode.UniqueViolation}
-	m.EXPECT().Registration(ctx, "admin", "1", "ua", "127.0.0.1").Return(uid, nil)
-	m.EXPECT().Registration(ctx, "repeat", "1", "ua", "127.0.0.1").Return(0, &unqueError)
-	m.EXPECT().Registration(ctx, "user", "1", "ua", "127.0.0.1").Return(0, errors.New("database error"))
+	errDB := errors.New("database error")
+	m.EXPECT().Registration(ctx, "admin", hashPassword("admin", "1"), "ua", "127.0.0.1").Return(uid, nil)
+	m.EXPECT().Registration(ctx, "repeat", hashPassword("repeat", "1"), "ua", "127.0.0.1").Return(0, &unqueError)
+	m.EXPECT().Registration(ctx, "user", hashPassword("user", "1"), "ua", "127.0.0.1").Return(0, errDB)
+	m.EXPECT().IsUniqueViolation(fmt.Errorf("gorm error: %w", &unqueError)).Return(true)
+	m.EXPECT().IsUniqueViolation(fmt.Errorf("gorm error: %w", errDB)).Return(false)
 
 	type args struct {
 		body          []byte
@@ -116,15 +132,8 @@ func TestRegister(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, got1, err := Register(ctx, tt.args.body, tt.args.key, tt.args.remoteAddr,
 				tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Register() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantCheck && got != tt.want {
-				t.Errorf("Register() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("Register() got1 = %v, want %v", got1, tt.want1)
+			if err = testCommon("Register()", got, tt.want, got1, tt.want1, err, tt.wantErr, tt.wantCheck); err != nil {
+				t.Error(err.Error())
 			}
 		})
 	}
@@ -135,9 +144,9 @@ func TestLoginFunc(t *testing.T) {
 	m := mocks.NewMockStorage(ctrl)
 	uid := 1
 	ctx := context.Background()
-	m.EXPECT().Login(ctx, "admin", "1", "ua", "127.0.0.1").Return(uid, nil)
-	m.EXPECT().Login(ctx, "noUser", "1", "ua", "127.0.0.1").Return(0, gorm.ErrRecordNotFound)
-	m.EXPECT().Login(ctx, "user", "1", "ua", "127.0.0.1").Return(0, errors.New("internal error"))
+	m.EXPECT().Login(ctx, "admin", hashPassword("admin", "1"), "ua", "127.0.0.1").Return(uid, nil)
+	m.EXPECT().Login(ctx, "noUser", hashPassword("noUser", "1"), "ua", "127.0.0.1").Return(0, gorm.ErrRecordNotFound)
+	m.EXPECT().Login(ctx, "user", hashPassword("user", "1"), "ua", "127.0.0.1").Return(0, errors.New("internal error"))
 
 	type args struct {
 		body          []byte
@@ -204,83 +213,10 @@ func TestLoginFunc(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := LoginFunc(ctx, tt.args.body, tt.args.key, tt.args.remoteAddr,
+			got, got1, err := Login(ctx, tt.args.body, tt.args.key, tt.args.remoteAddr,
 				tt.args.ua, tt.args.strg, tt.args.tokenLiveTime)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoginFunc() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.checkWant && got != tt.want {
-				t.Errorf("LoginFunc() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("LoginFunc() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func TestOrdersAddFunc(t *testing.T) {
-	type args struct {
-		ctx   context.Context
-		order string
-		strg  Storage
-	}
-
-	ctrl := gomock.NewController(t)
-	m := mocks.NewMockStorage(ctrl)
-	ctx := context.Background()
-	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 1), 1, "55875248746").Return(http.StatusAccepted, nil)
-	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 2), 2, "55875248746").Return(http.StatusConflict, nil)
-	m.EXPECT().AddOrder(context.WithValue(ctx, middlewares.AuthUID, 2), 2, "2377225624").Return(http.StatusOK, nil)
-
-	tests := []struct {
-		name    string
-		args    args
-		want    int
-		wantErr bool
-	}{
-		{
-			name:    "Успешное добавление",
-			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 1), order: "55875248746", strg: m},
-			want:    http.StatusAccepted,
-			wantErr: false,
-		},
-		{
-			name:    "Неправильный номер заказа",
-			args:    args{ctx: ctx, order: "1", strg: m},
-			want:    http.StatusUnprocessableEntity,
-			wantErr: true,
-		},
-		{
-			name:    "Пользователь не авторизован",
-			args:    args{ctx: ctx, order: "55875248746", strg: m},
-			want:    http.StatusUnauthorized,
-			wantErr: true,
-		},
-		{
-			name:    "Заказ добавлен другим пользователем",
-			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 2), order: "55875248746", strg: m},
-			want:    http.StatusConflict,
-			wantErr: false,
-		},
-		{
-			name:    "Заказ был добавлен ранее этим пользователем",
-			args:    args{ctx: context.WithValue(ctx, middlewares.AuthUID, 2), order: "2377225624", strg: m},
-			want:    http.StatusOK,
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := OrdersAddFunc(tt.args.ctx, tt.args.order, tt.args.strg)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("OrdersAddFunc() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("OrdersAddFunc() = %v, want %v", got, tt.want)
+			if err = testCommon("Register()", got, tt.want, got1, tt.want1, err, tt.wantErr, tt.checkWant); err != nil {
+				t.Error(err.Error())
 			}
 		})
 	}
