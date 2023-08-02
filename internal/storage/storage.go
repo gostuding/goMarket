@@ -72,10 +72,10 @@ func (s *psqlStorage) AddOrder(ctx context.Context, uid int, order string) (int,
 	orderOk := errors.New("order ok")
 	orderConflict := errors.New("order conflict")
 	err := s.con.Transaction(func(tx *gorm.DB) error {
-		result := s.con.WithContext(ctx).Where("number = ? ", order).First(&item)
+		result := tx.Where("number = ? ", order).First(&item)
 		if result.Error != nil {
 			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				result := s.con.WithContext(ctx).Create(&Orders{UID: uid, Number: order, Status: "NEW"})
+				result := tx.Create(&Orders{UID: uid, Number: order, Status: "NEW"})
 				if result.Error != nil {
 					return fmt.Errorf("create order error: %w", result.Error)
 				}
@@ -138,11 +138,10 @@ func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, su
 	var user Users
 	userNorFound := errors.New("user not found in database")
 	lowUserBalance := errors.New("low balance level")
-	withdraw := Withdraws{Sum: sum, UID: int(user.ID), Number: order}
 	err := s.con.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := s.con.WithContext(ctx).Where("id = ?", uid).First(&user)
+		result := tx.Where("id = ?", uid).First(&user)
 		if result.Error != nil {
-			return fmt.Errorf("get user error: %w, %w", userNorFound, result.Error)
+			return fmt.Errorf("get user error: %w", userNorFound)
 		}
 		if user.Balance < sum {
 			return lowUserBalance
@@ -152,6 +151,7 @@ func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, su
 		if err := tx.Save(&user).Error; err != nil {
 			return fmt.Errorf("update user balance error: %w", err)
 		}
+		withdraw := Withdraws{Sum: sum, UID: int(user.ID), Number: order}
 		if err := tx.Create(&withdraw).Error; err != nil {
 			return fmt.Errorf("create withdraw error: %w", err)
 		}
@@ -166,7 +166,7 @@ func (s *psqlStorage) AddWithdraw(ctx context.Context, uid int, order string, su
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return http.StatusConflict, errors.New("order number repeat error")
+			return http.StatusConflict, errors.New("withdraw order number repeat error")
 		}
 		return http.StatusInternalServerError, fmt.Errorf("transaction error: %w", err)
 	}
@@ -195,11 +195,11 @@ func (s *psqlStorage) SetOrderData(number string, status string, balance float32
 	var order Orders
 	var user Users
 	err := s.con.Transaction(func(tx *gorm.DB) error {
-		result := s.con.Where("number = ?", number).First(&order)
+		result := tx.Where("number = ?", number).First(&order)
 		if result.Error != nil {
 			return fmt.Errorf("update order status, get order (%s) error: %w", number, result.Error)
 		}
-		result = s.con.Where("id = ?", order.UID).First(&user)
+		result = tx.Where("id = ?", order.UID).First(&user)
 		if result.Error != nil {
 			return fmt.Errorf("update order status, get user (%d) error: %w", order.UID, result.Error)
 		}
