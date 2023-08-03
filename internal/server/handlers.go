@@ -180,7 +180,7 @@ func hashPassword(login, pwd string) string {
 // @failure 409 "Заказ зарегистрирован за другим пользователем"
 // @failure 422 "Номер заказа не прошёл проверку подлинности"
 // @failure 500 "Внутренняя ошибка сервиса".
-func AddOrder(args RequestResponce) {
+func AddOrder(args requestResponce) {
 	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
@@ -212,7 +212,7 @@ func AddOrder(args RequestResponce) {
 	args.w.WriteHeader(status)
 }
 
-func getListCommon(args *RequestResponce, name string, f func(context.Context, int) ([]byte, error)) {
+func getListCommon(args *requestResponce, name string, f func(context.Context, int) ([]byte, error)) {
 	args.logger.Debugf("%s list request", name)
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
@@ -250,7 +250,7 @@ func getListCommon(args *RequestResponce, name string, f func(context.Context, i
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func GetOrdersList(args RequestResponce) {
+func GetOrdersList(args requestResponce) {
 	getListCommon(&args, "orders", args.strg.GetOrders)
 }
 
@@ -264,7 +264,7 @@ func GetOrdersList(args RequestResponce) {
 // @Success 200 {object} storage.BalanceStruct "Баланс пользователя"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func GetUserBalance(args RequestResponce) {
+func GetUserBalance(args requestResponce) {
 	args.logger.Debug("user balance request")
 	uid, ok := args.r.Context().Value(middlewares.AuthUID).(int)
 	if !ok {
@@ -300,7 +300,7 @@ func GetUserBalance(args RequestResponce) {
 // @failure 409 "Заказ уже был зарегистрирован ранее"
 // @failure 422 "Номер заказа не прошёл проверку подлинности"
 // @failure 500 "Внутренняя ошибка сервиса".
-func AddWithdraw(args RequestResponce) {
+func AddWithdraw(args requestResponce) {
 	body, err := io.ReadAll(args.r.Body)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
@@ -346,6 +346,6 @@ func AddWithdraw(args RequestResponce) {
 // @failure 204 "Нет данных для ответа"
 // @failure 401 "Пользователь не авторизован"
 // @failure 500 "Внутренняя ошибка сервиса".
-func GetWithdrawsList(args RequestResponce) {
+func GetWithdrawsList(args requestResponce) {
 	getListCommon(&args, "withdraws", args.strg.GetWithdraws)
 }

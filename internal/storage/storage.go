@@ -25,12 +25,12 @@ type BalanceStruct struct {
 	Withdrawn float32 `json:"withdrawn"`
 }
 
-func NewPSQLStorage(connectionString string, pullCount int) (*psqlStorage, error) {
-	db, err := sql.Open("pgx", connectionString)
+func NewPSQLStorage(config *StorageConfig) (*psqlStorage, error) {
+	db, err := sql.Open("pgx", config.DBConnect)
 	if err != nil {
 		return nil, fmt.Errorf("pqx database connection error: %w", err)
 	}
-	db.SetMaxOpenConns(pullCount)
+	db.SetMaxOpenConns(config.DBConnectionPull)
 	con, err := gorm.Open(
 		postgres.New(postgres.Config{Conn: db}),
 		&gorm.Config{})

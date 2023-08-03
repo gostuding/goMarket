@@ -24,7 +24,24 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
-type RequestResponce struct {
+type ServerConfig struct {
+	ServerAddress          string
+	AccuralAddress         string
+	AuthSecretKey          []byte
+	AuthTokenLiveTime      int
+	AccrualRequestInterval int
+}
+
+func NewServerConfig() *ServerConfig {
+	return &ServerConfig{
+		ServerAddress:          "localhost:8080",
+		AccuralAddress:         "http://localhost:8081",
+		AccrualRequestInterval: defaultAccrualRequestInterval,
+		AuthTokenLiveTime:      defaultAuthTokenLiveTime,
+	}
+}
+
+type requestResponce struct {
 	r      *http.Request
 	w      http.ResponseWriter
 	strg   Storage
@@ -101,34 +118,34 @@ func makeRouter(strg Storage, logger *zap.SugaredLogger, key []byte, tokenLiveTi
 		r.Use(middlewares.AuthMiddleware(logger, loginURL, key))
 
 		r.Get(ordersListURL, func(w http.ResponseWriter, r *http.Request) {
-			GetOrdersList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+			GetOrdersList(requestResponce{r: r, w: w, strg: strg, logger: logger})
 		})
 
 		r.Post(ordersListURL, func(w http.ResponseWriter, r *http.Request) {
-			AddOrder(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+			AddOrder(requestResponce{r: r, w: w, strg: strg, logger: logger})
 		})
 
 		r.Get("/api/user/balance", func(w http.ResponseWriter, r *http.Request) {
-			GetUserBalance(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+			GetUserBalance(requestResponce{r: r, w: w, strg: strg, logger: logger})
 		})
 
 		r.Post("/api/user/balance/withdraw", func(w http.ResponseWriter, r *http.Request) {
-			AddWithdraw(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+			AddWithdraw(requestResponce{r: r, w: w, strg: strg, logger: logger})
 		})
 
 		r.Get("/api/user/withdrawals", func(w http.ResponseWriter, r *http.Request) {
-			GetWithdrawsList(RequestResponce{r: r, w: w, strg: strg, logger: logger})
+			GetWithdrawsList(requestResponce{r: r, w: w, strg: strg, logger: logger})
 		})
 	})
 
 	return router
 }
 
-func RunServer(cfg *Config, strg Storage, logger *zap.SugaredLogger) error {
+func RunServer(cfg *ServerConfig, strg Storage, logger *zap.SugaredLogger) error {
 	if cfg == nil {
 		return errors.New("server options is nil")
 	}
-	logger.Infoln("Run server at adress: ", cfg.ServerAddress)
+	logger.Infof("Run server at adress: %s", cfg.ServerAddress)
 	handler := makeRouter(strg, logger, cfg.AuthSecretKey, cfg.AuthTokenLiveTime, cfg.ServerAddress)
 	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancelFunc()

@@ -7,6 +7,22 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	defaultMaxConnectionPull = 100
+)
+
+type StorageConfig struct {
+	DBConnect        string
+	DBConnectionPull int
+}
+
+func NewStorageConfig() *StorageConfig {
+	return &StorageConfig{
+		DBConnect:        "host=localhost user=postgres database=market",
+		DBConnectionPull: defaultMaxConnectionPull,
+	}
+}
+
 type Users struct {
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`

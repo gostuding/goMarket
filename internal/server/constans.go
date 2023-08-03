@@ -1,7 +1,6 @@
 package server
 
 const (
-	defaultDBPullCount            = 100
 	defaultAuthTokenLiveTime      = 3600
 	defaultAccrualRequestInterval = 1
 	manyRequestsWaitTimeDef       = 60
