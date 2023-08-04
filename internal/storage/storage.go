@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/jackc/pgerrcode"
 	"gorm.io/driver/postgres"
@@ -44,7 +45,11 @@ func NewPSQLStorage(config *StorageConfig) (*psqlStorage, error) {
 }
 
 func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip string) (int, error) {
-	user := Users{Login: login, Pwd: pwd, UserAgent: ua, IP: ip}
+	passwd, err := hashPassword([]byte(pwd))
+	if err != nil {
+		return 0, err
+	}
+	user := Users{Login: login, Pwd: string(passwd), UserAgent: ua, IP: ip}
 	result := s.con.WithContext(ctx).Create(&user)
 	if result.Error != nil {
 		return 0, fmt.Errorf("sql error: %w", result.Error)
@@ -52,11 +57,23 @@ func (s *psqlStorage) Registration(ctx context.Context, login, pwd, ua, ip strin
 	return int(user.ID), nil
 }
 
+func hashPassword(pwd []byte) ([]byte, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword(pwd, bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("password hash error: %w", err)
+	}
+	return hashedPassword, nil
+}
+
 func (s *psqlStorage) Login(ctx context.Context, login, pwd, ua, ip string) (int, error) {
 	var user Users
-	result := s.con.WithContext(ctx).Where("login = ? AND pwd = ?", login, pwd).First(&user)
+	result := s.con.WithContext(ctx).Where("login = ?", login).First(&user)
 	if result.Error != nil {
 		return 0, fmt.Errorf("user error: %w", result.Error)
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(user.Pwd), []byte(pwd))
+	if err != nil {
+		return 0, gorm.ErrRecordNotFound
 	}
 	user.UserAgent = ua
 	user.IP = ip

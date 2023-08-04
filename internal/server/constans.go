@@ -5,6 +5,7 @@ const (
 	defaultAccrualRequestInterval = 1
 	manyRequestsWaitTimeDef       = 60
 	shutdownTimeout               = 10
+	defaultRequestPoll            = 10
 	writeResponceErrorString      = "responce body write error: %w"
 	contentTypeString             = "Content-Type"
 	ctApplicationJSONString       = "application/json"

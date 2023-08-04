@@ -34,9 +34,9 @@ func TestRegister(t *testing.T) {
 	ctx := context.Background()
 	unqueError := pgconn.PgError{Code: pgerrcode.UniqueViolation}
 	errDB := errors.New("database error")
-	m.EXPECT().Registration(ctx, "admin", hashPassword("admin", "1"), "ua", "127.0.0.1").Return(uid, nil)
-	m.EXPECT().Registration(ctx, "repeat", hashPassword("repeat", "1"), "ua", "127.0.0.1").Return(0, &unqueError)
-	m.EXPECT().Registration(ctx, "user", hashPassword("user", "1"), "ua", "127.0.0.1").Return(0, errDB)
+	m.EXPECT().Registration(ctx, "admin", gomock.Any(), "ua", "127.0.0.1").Return(uid, nil)
+	m.EXPECT().Registration(ctx, "repeat", gomock.Any(), "ua", "127.0.0.1").Return(0, &unqueError)
+	m.EXPECT().Registration(ctx, "user", gomock.Any(), "ua", "127.0.0.1").Return(0, errDB)
 	m.EXPECT().IsUniqueViolation(fmt.Errorf("gorm error: %w", &unqueError)).Return(true)
 	m.EXPECT().IsUniqueViolation(fmt.Errorf("gorm error: %w", errDB)).Return(false)
 
@@ -144,9 +144,9 @@ func TestLoginFunc(t *testing.T) {
 	m := mocks.NewMockStorage(ctrl)
 	uid := 1
 	ctx := context.Background()
-	m.EXPECT().Login(ctx, "admin", hashPassword("admin", "1"), "ua", "127.0.0.1").Return(uid, nil)
-	m.EXPECT().Login(ctx, "noUser", hashPassword("noUser", "1"), "ua", "127.0.0.1").Return(0, gorm.ErrRecordNotFound)
-	m.EXPECT().Login(ctx, "user", hashPassword("user", "1"), "ua", "127.0.0.1").Return(0, errors.New("internal error"))
+	m.EXPECT().Login(ctx, "admin", gomock.Any(), "ua", "127.0.0.1").Return(uid, nil)
+	m.EXPECT().Login(ctx, "noUser", gomock.Any(), "ua", "127.0.0.1").Return(0, gorm.ErrRecordNotFound)
+	m.EXPECT().Login(ctx, "user", gomock.Any(), "ua", "127.0.0.1").Return(0, errors.New("internal error"))
 
 	type args struct {
 		body          []byte

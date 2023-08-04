@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 
@@ -182,13 +181,19 @@ func RunServer(cfg *ServerConfig, strg Storage, logger *zap.SugaredLogger) error
 	return <-serverFinishError
 }
 
-func timeRequest(ctxStop context.Context, url string,
-	logger *zap.SugaredLogger, strg CheckOrdersStorage, interval int) {
+func timeRequest(
+	ctxStop context.Context,
+	url string,
+	logger *zap.SugaredLogger,
+	strg CheckOrdersStorage,
+	interval int,
+) {
 	updateTicker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer updateTicker.Stop()
 	sleepTime := time.Now()
-	sleepChan := make(chan int, 1)
-	errorChan := make(chan error, 1)
+	sleepChan := make(chan int, defaultRequestPoll)
+	errorChan := make(chan error, defaultRequestPoll)
+	ordersChan := make(chan string, defaultRequestPoll)
 
 	go func() {
 		for {
@@ -208,7 +213,10 @@ func timeRequest(ctxStop context.Context, url string,
 		}
 	}()
 
-	wg := sync.WaitGroup{}
+	for i := 0; i < cap(ordersChan); i++ {
+		go createAccrualRequest(ordersChan, url, sleepChan, errorChan, strg)
+	}
+
 	for {
 		select {
 		case <-updateTicker.C:
@@ -216,27 +224,41 @@ func timeRequest(ctxStop context.Context, url string,
 				break
 			}
 			for _, order := range strg.GetAccrualOrders() {
-				wg.Add(1)
-				go accrualRequest(fmt.Sprintf("%s/%s", url, order), strg, sleepChan, errorChan, &wg)
+				ordersChan <- order
 			}
-			wg.Wait()
 		case <-ctxStop.Done():
 			close(sleepChan)
 			close(errorChan)
+			close(ordersChan)
 			logger.Debugln("Accrual gorutine finished")
 			return
 		}
 	}
 }
 
-func accrualRequest(url string, strg CheckOrdersStorage, sleepChan chan int,
-	errorChan chan error, wg *sync.WaitGroup) {
-	defer wg.Done()
+func createAccrualRequest(
+	ordersChan chan string,
+	baseURL string,
+	sleepChan chan int,
+	errorChan chan error,
+	strg CheckOrdersStorage,
+) {
 	client := http.Client{}
+	for order := range ordersChan {
+		request(client, fmt.Sprintf("%s/%s", baseURL, order), sleepChan, errorChan, strg)
+	}
+}
+
+func request(
+	client http.Client,
+	url string,
+	sleepChan chan int,
+	errorChan chan error,
+	strg CheckOrdersStorage,
+) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		errorChan <- fmt.Errorf("create request error: %w", err)
-		return
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -255,7 +277,7 @@ func accrualRequest(url string, strg CheckOrdersStorage, sleepChan chan int,
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		errorChan <- fmt.Errorf("responce (%s) status code incorrect: %d", url, resp.StatusCode)
+		errorChan <- fmt.Errorf("responce order (%s) status code incorrect: %d", url, resp.StatusCode)
 		return
 	}
 	data, err := io.ReadAll(resp.Body)

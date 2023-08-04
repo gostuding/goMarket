@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -96,7 +94,7 @@ func Register(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	if err != nil {
 		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
-	uid, err := strg.Registration(ctx, user.Login, hashPassword(user.Login, user.Password), ua, ip)
+	uid, err := strg.Registration(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
 		status := http.StatusInternalServerError
 		err = fmt.Errorf(gormError, err)
@@ -134,7 +132,7 @@ func Login(ctx context.Context, body, key []byte, remoteAddr, ua string,
 	if err != nil {
 		return "", http.StatusBadRequest, fmt.Errorf(incorrectIPErroString, err)
 	}
-	uid, err := strg.Login(ctx, user.Login, hashPassword(user.Login, user.Password), ua, ip)
+	uid, err := strg.Login(ctx, user.Login, user.Password, ua, ip)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", http.StatusUnauthorized, fmt.Errorf("user not found in system. Login: '%s'", user.Login)
@@ -147,22 +145,6 @@ func Login(ctx context.Context, body, key []byte, remoteAddr, ua string,
 		return "", http.StatusInternalServerError, fmt.Errorf(tokenGenerateError, err)
 	}
 	return token, http.StatusOK, nil
-}
-
-func solFromBytes(text []byte) int64 {
-	var summ int64 = 0
-	for rune := range text {
-		summ += int64(rune)
-	}
-	return summ
-}
-
-func hashPassword(login, pwd string) string {
-	loginSol := solFromBytes([]byte(login))
-	pwdSol := solFromBytes([]byte(pwd))
-	pwd = fmt.Sprintf("%d%s%d%s%d", loginSol, login, pwdSol, pwd, loginSol+pwdSol)
-	hash := md5.Sum([]byte(pwd))
-	return hex.EncodeToString(hash[:])
 }
 
 // AddOrder ...
@@ -275,13 +257,13 @@ func GetUserBalance(args requestResponce) {
 	data, err := args.strg.GetUserBalance(args.r.Context(), uid)
 	if err != nil {
 		args.w.WriteHeader(http.StatusInternalServerError)
-		args.logger.Warnln("get user balance error", err)
+		args.logger.Warnf("get user balance error: %w", err)
 		return
 	}
 	args.w.Header().Add(contentTypeString, ctApplicationJSONString)
 	_, err = args.w.Write(data)
 	if err != nil {
-		args.logger.Warnln(writeResponceErrorString, err)
+		args.logger.Warnf(writeResponceErrorString, err)
 	}
 }
 
@@ -329,9 +311,9 @@ func AddWithdraw(args requestResponce) {
 	}
 	status, err := args.strg.AddWithdraw(args.r.Context(), uid, withdraw.Order, withdraw.Sum)
 	if err != nil {
-		args.logger.Warnln("add withdraw error", err)
+		args.logger.Warnf("add withdraw error: %w", err)
 	}
-	args.logger.Debugln("add withdraw status", status)
+	args.logger.Debugf("add withdraw status: %d \n", status)
 	args.w.WriteHeader(status)
 }
 

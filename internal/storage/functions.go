@@ -27,7 +27,7 @@ type Users struct {
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`
 	Login     string    `gorm:"unique" json:"-"`
-	Pwd       string    `gorm:"type:varchar(32)" json:"-"`
+	Pwd       string    `gorm:"type:varchar(255)" json:"-"`
 	UserAgent string    `gorm:"type:varchar(255)" json:"-"`
 	IP        string    `gorm:"type:varchar(15)" json:"-"`
 	Balance   float32   `gorm:"type:numeric" json:"curent"`
